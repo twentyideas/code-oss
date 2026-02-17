@@ -1,0 +1,160 @@
+name: Build VS Code Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      vscode_ref:
+        description: "VS Code ref to build (tag, branch, or commit). Defaults to the repo's default branch."
+        required: false
+        default: ""
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin-arm64
+          - os: windows-latest
+            platform: win32-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout code-oss
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.vscode_ref || '' }}
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        shell: bash
+        run: npm install
+
+      - name: Build VS Code REH Web server
+        shell: bash
+        run: npm run gulp "vscode-reh-web-${{ matrix.platform }}"
+
+      - name: Patch product.json for Open VSX marketplace
+        shell: bash
+        run: |
+          OUTPUT_DIR="../vscode-reh-web-${{ matrix.platform }}"
+          PRODUCT_JSON="$OUTPUT_DIR/product.json"
+
+          if [ -f "$PRODUCT_JSON" ]; then
+            node -e "
+          const fs = require('fs');
+          const product = JSON.parse(fs.readFileSync('$PRODUCT_JSON', 'utf8'));
+          product.extensionsGallery = {
+            serviceUrl: 'https://open-vsx.org/vscode/gallery',
+            itemUrl: 'https://open-vsx.org/vscode/item',
+            resourceUrlTemplate: 'https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}',
+            controlUrl: '',
+            nlsBaseUrl: '',
+            publisherUrl: ''
+          };
+          fs.writeFileSync('$PRODUCT_JSON', JSON.stringify(product, null, 2));
+          "
+            echo "Open VSX marketplace configured"
+          else
+            echo "::warning::product.json not found — extensions marketplace will not work"
+          fi
+
+      - name: Create tarball
+        shell: bash
+        run: |
+          OUTPUT_DIR="../vscode-reh-web-${{ matrix.platform }}"
+          TARBALL="vscode-reh-web-${{ matrix.platform }}.tar.gz"
+
+          if [ ! -d "$OUTPUT_DIR" ]; then
+            echo "::error::Build output not found at $OUTPUT_DIR"
+            exit 1
+          fi
+
+          tar -czf "$TARBALL" -C "$(dirname "$OUTPUT_DIR")" "vscode-reh-web-${{ matrix.platform }}"
+          echo "Created $TARBALL ($(du -h "$TARBALL" | cut -f1))"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-reh-web-${{ matrix.platform }}
+          path: vscode-reh-web-${{ matrix.platform }}.tar.gz
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout (for version detection)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.vscode_ref || '' }}
+          sparse-checkout: package.json
+          sparse-checkout-cone-mode: false
+
+      - name: Detect VS Code version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=vscode-server-v$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected VS Code version: $VERSION"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        shell: bash
+        run: find artifacts -type f -name "*.tar.gz" | sort
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Collect all tarballs
+          TARBALLS=$(find artifacts -type f -name "*.tar.gz")
+
+          if [ -z "$TARBALLS" ]; then
+            echo "::error::No tarballs found in artifacts"
+            exit 1
+          fi
+
+          # Check if release already exists
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists — uploading assets with --clobber"
+            echo "$TARBALLS" | xargs gh release upload "$TAG" --clobber
+          else
+            echo "Creating release $TAG"
+            echo "$TARBALLS" | xargs gh release create "$TAG" \
+              --title "VS Code Server v$VERSION" \
+              --notes "Pre-built VS Code REH Web server for DevSwarm.
+
+Built from VS Code v$VERSION.
+Platforms: darwin-arm64, win32-x64
+
+**Usage in DevSwarm:**
+Update \`vscodeServerVersion\` in \`package.json\` to \`v$VERSION\` and run \`pnpm install\`."
+          fi
+
+          echo "Release: $TAG"
+          gh release view "$TAG"
