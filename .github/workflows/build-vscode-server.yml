@@ -145,15 +145,19 @@ jobs:
             echo "$TARBALLS" | xargs gh release upload "$TAG" --clobber
           else
             echo "Creating release $TAG"
+            NOTES=$(cat <<EOF
+          Pre-built VS Code REH Web server for DevSwarm.
+
+          Built from VS Code v$VERSION.
+          Platforms: darwin-arm64, win32-x64
+
+          **Usage in DevSwarm:**
+          Update vscodeServerVersion in package.json to v$VERSION and run pnpm install.
+          EOF
+            )
             echo "$TARBALLS" | xargs gh release create "$TAG" \
               --title "VS Code Server v$VERSION" \
-              --notes "Pre-built VS Code REH Web server for DevSwarm.
-
-Built from VS Code v$VERSION.
-Platforms: darwin-arm64, win32-x64
-
-**Usage in DevSwarm:**
-Update \`vscodeServerVersion\` in \`package.json\` to \`v$VERSION\` and run \`pnpm install\`."
+              --notes "$NOTES"
           fi
 
           echo "Release: $TAG"
