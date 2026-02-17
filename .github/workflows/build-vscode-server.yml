@@ -14,12 +14,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-14-large
             platform: darwin-arm64
           - os: windows-latest
             platform: win32-x64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 150
 
     steps:
       - name: Checkout code-oss
@@ -37,11 +37,25 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ matrix.platform }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
         shell: bash
         run: npm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache build output
+        uses: actions/cache@v4
+        with:
+          path: out
+          key: build-out-${{ matrix.platform }}-${{ hashFiles('src/**') }}
+          restore-keys: |
+            build-out-${{ matrix.platform }}-
 
       - name: Build VS Code REH Web server
         shell: bash
