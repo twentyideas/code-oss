@@ -120,12 +120,13 @@ import { ChatInputPartWidgetController } from './chatInputPartWidgets.js';
 import { IChatInputPickerOptions } from './chatInputPickerActionItem.js';
 import { ChatSelectedTools } from './chatSelectedTools.js';
 import { DelegationSessionPickerActionItem } from './delegationSessionPickerActionItem.js';
-import { IModelPickerDelegate, ModelPickerActionItem } from './modelPickerActionItem.js';
+import { IModelPickerDelegate } from './modelPickerActionItem.js';
 import { IModePickerDelegate, ModePickerActionItem } from './modePickerActionItem.js';
 import { SessionTypePickerActionItem } from './sessionTargetPickerActionItem.js';
 import { WorkspacePickerActionItem } from './workspacePickerActionItem.js';
 import { ChatContextUsageWidget } from '../../widgetHosts/viewPane/chatContextUsageWidget.js';
 import { Target } from '../../../common/promptSyntax/service/promptsService.js';
+import { EnhancedModelPickerActionItem } from './modelPickerActionItem2.js';
 
 const $ = dom.$;
 
@@ -349,6 +350,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 	private editingSentRequestKey!: IContextKey<ChatContextKeys.EditingRequestType | undefined>;
 	private chatModeKindKey: IContextKey<ChatModeKind>;
 	private chatModeNameKey: IContextKey<string>;
+	private chatModelIdKey: IContextKey<string>;
 	private withinEditSessionKey: IContextKey<boolean>;
 	private filePartOfEditSessionKey: IContextKey<boolean>;
 	private chatSessionHasOptions: IContextKey<boolean>;
@@ -356,7 +358,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 	private agentSessionTypeKey: IContextKey<string>;
 	private chatSessionHasCustomAgentTarget: IContextKey<boolean>;
 	private chatSessionHasTargetedModels: IContextKey<boolean>;
-	private modelWidget: ModelPickerActionItem | undefined;
+	private modelWidget: EnhancedModelPickerActionItem | undefined;
 	private modeWidget: ModePickerActionItem | undefined;
 	private sessionTargetWidget: SessionTypePickerActionItem | undefined;
 	private delegationWidget: DelegationSessionPickerActionItem | undefined;
@@ -567,6 +569,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 		this._hasQuestionCarouselContextKey = ChatContextKeys.Editing.hasQuestionCarousel.bindTo(contextKeyService);
 		this.chatModeKindKey = ChatContextKeys.chatModeKind.bindTo(contextKeyService);
 		this.chatModeNameKey = ChatContextKeys.chatModeName.bindTo(contextKeyService);
+		this.chatModelIdKey = ChatContextKeys.chatModelId.bindTo(contextKeyService);
 		this.withinEditSessionKey = ChatContextKeys.withinEditSessionDiff.bindTo(contextKeyService);
 		this.filePartOfEditSessionKey = ChatContextKeys.filePartOfEditSession.bindTo(contextKeyService);
 		this.chatSessionHasOptions = ChatContextKeys.chatSessionHasModels.bindTo(contextKeyService);
@@ -638,6 +641,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 		}));
 		this._register(autorun(reader => {
 			const lm = this._currentLanguageModel.read(reader);
+			this.chatModelIdKey.set(lm?.metadata.id.toLowerCase() ?? '');
 			if (lm?.metadata.name) {
 				this.accessibilityService.alert(lm.metadata.name);
 			}
@@ -675,7 +679,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 
 	private setImplicitContextEnablement() {
 		if (this.implicitContext && this.configurationService.getValue<boolean>('chat.implicitContext.suggestedContext')) {
-			this.implicitContext.setEnabled(this._currentModeObservable.get().kind !== ChatMode.Agent.kind);
+			this.implicitContext.setEnabled(this._currentModeObservable.get().name.get().toLowerCase() === 'ask');
 		}
 	}
 
@@ -2180,7 +2184,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 						getModels: () => this.getModels(),
 						canManageModels: () => !this.getCurrentSessionType()
 					};
-					return this.modelWidget = this.instantiationService.createInstance(ModelPickerActionItem, action, undefined, itemDelegate, pickerOptions);
+					return this.modelWidget = this.instantiationService.createInstance(EnhancedModelPickerActionItem, action, itemDelegate, pickerOptions);
 				} else if (action.id === OpenModePickerAction.ID && action instanceof MenuItemAction) {
 					const delegate: IModePickerDelegate = {
 						currentMode: this._currentModeObservable,

@@ -47,8 +47,6 @@ import { IMarkdownRenderer } from '../../../../../platform/markdown/browser/mark
 import { isDark } from '../../../../../platform/theme/common/theme.js';
 import { IThemeService } from '../../../../../platform/theme/common/themeService.js';
 import { AccessibilitySignal, IAccessibilitySignalService } from '../../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
-import { FocusMode } from '../../../../../platform/native/common/native.js';
-import { IHostService } from '../../../../services/host/browser/host.js';
 import { IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';
 import { IWorkbenchIssueService } from '../../../issue/common/issue.js';
 import { CodiconActionViewItem } from '../../../notebook/browser/view/cellParts/cellActionView.js';
@@ -59,6 +57,7 @@ import { ChatContextKeys } from '../../common/actions/chatContextKeys.js';
 import { IChatTextEditGroup } from '../../common/model/chatModel.js';
 import { chatSubcommandLeader } from '../../common/requestParser/chatParserTypes.js';
 import { ChatAgentVoteDirection, ChatAgentVoteDownReason, ChatErrorLevel, ChatRequestQueueKind, IChatConfirmation, IChatContentReference, IChatDisabledClaudeHooksPart, IChatElicitationRequest, IChatElicitationRequestSerialized, IChatExtensionsContent, IChatFollowup, IChatHookPart, IChatMarkdownContent, IChatMcpServersStarting, IChatMcpServersStartingSerialized, IChatMultiDiffData, IChatMultiDiffDataSerialized, IChatPullRequestContent, IChatQuestionCarousel, IChatService, IChatTask, IChatTaskSerialized, IChatThinkingPart, IChatToolInvocation, IChatToolInvocationSerialized, IChatTreeData, IChatUndoStop, isChatFollowup } from '../../common/chatService/chatService.js';
+import { ChatQuestionCarouselData } from '../../common/model/chatProgressTypes/chatQuestionCarouselData.js';
 import { localChatSessionType } from '../../common/chatSessionsService.js';
 import { getChatSessionType } from '../../common/model/chatUri.js';
 import { IChatRequestVariableEntry } from '../../common/attachments/chatVariableEntries.js';
@@ -187,7 +186,6 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 	private readonly _autoReply: ChatQuestionCarouselAutoReply;
 
 	private readonly _notifiedQuestionCarousels = new Set<string>();
-	private readonly _questionCarouselToast = this._register(new DisposableStore());
 
 	private readonly chatContentMarkdownRenderer: IMarkdownRenderer;
 	private readonly markdownDecorationsRenderer: ChatMarkdownDecorationsRenderer;
@@ -255,7 +253,6 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 		@IChatWidgetService private readonly chatWidgetService: IChatWidgetService,
 		@IChatEntitlementService private readonly chatEntitlementService: IChatEntitlementService,
 		@IChatService private readonly chatService: IChatService,
-		@IHostService private readonly hostService: IHostService,
 		@IAccessibilitySignalService private readonly accessibilitySignalService: IAccessibilitySignalService,
 		@IAccessibilityService private readonly accessibilityService: IAccessibilityService,
 	) {
@@ -464,8 +461,7 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 		this.hoverHidden(requestHover);
 
 		const checkpointContainer = dom.append(rowContainer, $('.checkpoint-container'));
-		const codiconContainer = dom.append(checkpointContainer, $('.codicon-container'));
-		dom.append(codiconContainer, $('span.codicon.codicon-bookmark'));
+		dom.append(checkpointContainer, $('.checkpoint-line-left'));
 
 		const checkpointToolbar = templateDisposables.add(scopedInstantiationService.createInstance(MenuWorkbenchToolBar, checkpointContainer, MenuId.ChatMessageCheckpoint, {
 			actionViewItemProvider: (action, options) => {
@@ -483,7 +479,7 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 			},
 		}));
 
-		dom.append(checkpointContainer, $('.checkpoint-divider'));
+		dom.append(checkpointContainer, $('.checkpoint-line-right'));
 
 		const user = dom.append(header, $('.user'));
 		const avatarContainer = dom.append(user, $('.avatar-container'));
@@ -517,10 +513,12 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 		footerDetailsContainer.tabIndex = 0;
 
 		const checkpointRestoreContainer = dom.append(rowContainer, $('.checkpoint-restore-container'));
-		const codiconRestoreContainer = dom.append(checkpointRestoreContainer, $('.codicon-container'));
-		dom.append(codiconRestoreContainer, $('span.codicon.codicon-bookmark'));
+		dom.append(checkpointRestoreContainer, $('.checkpoint-line-left'));
 		const label = dom.append(checkpointRestoreContainer, $('span.checkpoint-label-text'));
 		label.textContent = localize('checkpointRestore', 'Checkpoint Restored');
+		const dot = dom.append(checkpointRestoreContainer, $('span.checkpoint-dot-separator'));
+		dot.textContent = '\u00B7';
+		dot.setAttribute('aria-hidden', 'true');
 		const checkpointRestoreToolbar = templateDisposables.add(scopedInstantiationService.createInstance(MenuWorkbenchToolBar, checkpointRestoreContainer, MenuId.ChatMessageRestoreCheckpoint, {
 			actionViewItemProvider: (action, options) => {
 				if (action instanceof MenuItemAction) {
@@ -537,7 +535,7 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 			},
 		}));
 
-		dom.append(checkpointRestoreContainer, $('.checkpoint-divider'));
+		dom.append(checkpointRestoreContainer, $('.checkpoint-line-right'));
 
 
 		const agentHover = templateDisposables.add(this.instantiationService.createInstance(ChatAgentHover));
@@ -969,9 +967,15 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 		if (collapsedToolsMode !== CollapsedToolsDisplayMode.Off &&
 			partsToRender.some(part =>
 				(part.kind === 'toolInvocation' || part.kind === 'toolInvocationSerialized') &&
-				part.presentation !== 'hidden' &&
 				this.shouldPinPart(part, element)
 			)) {
+			return false;
+		}
+
+
+		const hasRenderedThinkingPart = (templateData.renderedParts ?? []).some(part => part instanceof ChatThinkingContentPart);
+		const hasEditPillMarkdown = partsToRender.some(part => part.kind === 'markdownContent' && this.hasCodeblockUri(part));
+		if (hasRenderedThinkingPart && hasEditPillMarkdown) {
 			return false;
 		}
 
@@ -1469,7 +1473,7 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 		}
 
 		// don't pin ask questions tool invocations
-		const isAskQuestionsTool = (part.kind === 'toolInvocation' || part.kind === 'toolInvocationSerialized') && part.toolId === 'copilot_askQuestions';
+		const isAskQuestionsTool = (part.kind === 'toolInvocation' || part.kind === 'toolInvocationSerialized') && (part.toolId === 'copilot_askQuestions' || part.toolId === 'vscode_askQuestions');
 		if (isAskQuestionsTool) {
 			return false;
 		}
@@ -1699,6 +1703,9 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 			} else if (content.kind === 'markdownContent') {
 				return this.renderMarkdown(content, templateData, context);
 			} else if (content.kind === 'references') {
+				if (isResponseVM(context.element) && context.element.model.request?.modeInfo?.modeId === ChatModeKind.Agent) {
+					return this.renderNoContent(other => other.kind === content.kind);
+				}
 				return this.renderContentReferencesListData(content, undefined, context, templateData);
 			} else if (content.kind === 'codeCitations') {
 				return this.renderCodeCitations(content, context, templateData);
@@ -2085,6 +2092,9 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 				carousel.data = answersRecord;
 			}
 			carousel.isUsed = true;
+			if (carousel instanceof ChatQuestionCarouselData) {
+				carousel.completion.complete({ answers: answersRecord });
+			}
 
 			// Notify the extension about the carousel answers to resolve the deferred promise
 			if (isResponseVM(context.element) && carousel.resolveId) {
@@ -2106,6 +2116,9 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 			if (responseIsComplete && !carousel.isUsed && isResponseVM(context.element) && carousel.resolveId && carousel.data === undefined) {
 				carousel.data = {};
 				carousel.isUsed = true;
+				if (carousel instanceof ChatQuestionCarouselData) {
+					carousel.completion.complete({ answers: undefined });
+				}
 				this.chatService.notifyQuestionCarouselAnswer(context.element.requestId, carousel.resolveId, undefined);
 				this.pendingQuestionCarousels.get(context.element.sessionResource)?.clear();
 			}
@@ -2210,60 +2223,13 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 			this._notifiedQuestionCarousels.add(stableKey);
 		}
 
-		// Reuse the existing confirmation notification setting.
-		if (!this.configService.getValue<boolean>('chat.notifyWindowOnConfirmation')) {
-			return;
-		}
-
-		if (!isResponseVM(context.element)) {
-			return;
-		}
-
-		const widget = this.chatWidgetService.getWidgetBySessionResource(context.element.sessionResource);
-		if (!widget) {
-			return;
-		}
+		// Play accessibility signal regardless of notification setting
 		const signalMessage = questionCount === 1
 			? localize('chat.questionCarouselSignalOne', "Chat needs your input (1 question).")
 			: localize('chat.questionCarouselSignalMany', "Chat needs your input ({0} questions).", questionCount);
 		this.accessibilitySignalService.playSignal(AccessibilitySignal.chatUserActionRequired, { allowManyInParallel: true, customAlertMessage: signalMessage });
 
-		const targetWindow = dom.getWindow(widget.domNode);
-		if (!targetWindow || targetWindow.document.hasFocus()) {
-			return;
-		}
-
-
-		const sessionTitle = widget.viewModel?.model.title;
-		const notificationTitle = sessionTitle ? localize('chatTitle', "Chat: {0}", sessionTitle) : localize('chat.untitledChat', "Untitled Chat");
-
-		(async () => {
-			try {
-				await this.hostService.focus(targetWindow, { mode: FocusMode.Notify });
-
-				// Dispose any previous unhandled notifications to avoid replacement/coalescing.
-				this._questionCarouselToast.clear();
-
-				const cts = new CancellationTokenSource();
-				this._questionCarouselToast.add(toDisposable(() => cts.dispose(true)));
-
-				const { clicked, actionIndex } = await this.hostService.showToast({
-					title: notificationTitle,
-					body: signalMessage,
-					actions: [localize('openChat', "Open Chat")],
-				}, cts.token);
-
-				this._questionCarouselToast.clear();
-
-				if (clicked || actionIndex === 0) {
-					await this.hostService.focus(targetWindow, { mode: FocusMode.Force });
-					await this.chatWidgetService.reveal(widget);
-					widget.focusInput();
-				}
-			} catch (error) {
-				this.logService.trace('ChatListItemRenderer#_notifyOnQuestionCarousel', toErrorMessage(error));
-			}
-		})();
+		// OS toast notification is handled by ChatWindowNotifier
 	}
 
 	private maybeAutoReplyToQuestionCarousel(
