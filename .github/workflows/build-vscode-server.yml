@@ -67,7 +67,7 @@ jobs:
 
       - name: Build VS Code REH Web server
         shell: bash
-        run: npm run gulp "vscode-reh-web-${{ matrix.platform }}"
+        run: node --max-old-space-size=${{ runner.os == 'Linux' && '4096' || '8192' }} ./node_modules/gulp/bin/gulp.js "vscode-reh-web-${{ matrix.platform }}"
 
       - name: Patch product.json for Open VSX marketplace
         shell: bash
