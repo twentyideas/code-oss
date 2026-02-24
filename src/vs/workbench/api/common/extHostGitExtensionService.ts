@@ -49,6 +49,7 @@ interface Repository {
 	readonly rootUri: vscode.Uri;
 	readonly state: RepositoryState;
 
+	status(): Promise<void>;
 	getRefs(query: GitRefQuery, token?: vscode.CancellationToken): Promise<GitRef[]>;
 }
 
@@ -154,17 +155,22 @@ export class ExtHostGitExtensionService extends Disposable implements IExtHostGi
 		}
 
 		let repositoryState = repository.state;
-		if (repository.state.HEAD === undefined) {
-			// If the repository is not initialized, wait for it
-			await Event.toPromise(repository.state.onDidChange, this._disposables);
+		if (repositoryState.HEAD === undefined) {
+			// Opening the repository does not wait for the repository state to be
+			// initialized so we need to wait for the first change event to ensure
+			// that the repository state is fully loaded before we return it to the
+			// main thread.
+			await Event.toPromise(repositoryState.onDidChange, this._disposables);
 			repositoryState = repository.state;
 		}
 
+		// Store the repository and its handle in the maps
 		const handle = ExtHostGitExtensionService._handlePool++;
 
 		this._repositories.set(handle, repository);
 		this._repositoryByUri.set(repository.rootUri, handle);
 
+		// Subscribe to repository state changes
 		this._disposables.add(repository.state.onDidChange(() => {
 			this._proxy.$onDidChangeRepository(handle);
 		}));
@@ -173,7 +179,9 @@ export class ExtHostGitExtensionService extends Disposable implements IExtHostGi
 			handle,
 			rootUri: repository.rootUri,
 			state: {
-				HEAD: repositoryState.HEAD ? toGitBranchDto(repositoryState.HEAD) : undefined
+				HEAD: repository.state.HEAD
+					? toGitBranchDto(repository.state.HEAD)
+					: undefined
 			}
 		};
 	}
