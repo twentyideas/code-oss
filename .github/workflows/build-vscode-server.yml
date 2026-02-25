@@ -83,7 +83,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rebuild node-pty for target architecture
+      - name: Rebuild remote native modules for target architecture
         if: steps.check.outputs.skip != 'true'
         shell: bash
         run: |
@@ -94,10 +94,10 @@ jobs:
           # Read Node.js target version from remote/.npmrc
           NODE_TARGET=$(grep '^target=' remote/.npmrc | cut -d'"' -f2)
 
-          echo "Rebuilding node-pty in remote/node_modules for arch=$TARGET_ARCH, node=$NODE_TARGET"
-          cd remote/node_modules/node-pty
-          npx node-gyp rebuild --arch="$TARGET_ARCH" --target="$NODE_TARGET"
-          echo "node-pty rebuilt successfully"
+          echo "Rebuilding all native modules in remote/node_modules for arch=$TARGET_ARCH, node=$NODE_TARGET"
+          cd remote
+          npm rebuild --arch="$TARGET_ARCH" --target="$NODE_TARGET"
+          echo "Remote native modules rebuilt successfully"
 
       - name: Cache build output
         if: steps.check.outputs.skip != 'true'
@@ -113,29 +113,32 @@ jobs:
         shell: bash
         run: npm run gulp "vscode-reh-web-${{ matrix.platform }}"
 
-      - name: Validate pty.node architecture
+      - name: Validate native module architectures
         if: steps.check.outputs.skip != 'true' && runner.os == 'macOS'
         shell: bash
         run: |
           TARGET_ARCH="${{ matrix.platform }}"
           TARGET_ARCH="${TARGET_ARCH##*-}"
 
-          PTY_NODE="../vscode-reh-web-${{ matrix.platform }}/node_modules/node-pty/build/Release/pty.node"
+          OUTPUT_DIR="../vscode-reh-web-${{ matrix.platform }}/node_modules"
+          FAILED=0
 
-          if [ ! -f "$PTY_NODE" ]; then
-            echo "::error::pty.node not found at $PTY_NODE"
+          echo "Checking all .node binaries in $OUTPUT_DIR for $TARGET_ARCH..."
+          while IFS= read -r NODE_FILE; do
+            FILE_OUTPUT=$(file "$NODE_FILE")
+            SHORT_PATH="${NODE_FILE#$OUTPUT_DIR/}"
+            if echo "$FILE_OUTPUT" | grep -q "$TARGET_ARCH"; then
+              echo "  ✓ $SHORT_PATH"
+            else
+              echo "::error::Architecture mismatch in $SHORT_PATH! Expected $TARGET_ARCH but got: $FILE_OUTPUT"
+              FAILED=1
+            fi
+          done < <(find "$OUTPUT_DIR" -name "*.node" -type f)
+
+          if [ "$FAILED" -eq 1 ]; then
             exit 1
           fi
-
-          FILE_OUTPUT=$(file "$PTY_NODE")
-          echo "pty.node: $FILE_OUTPUT"
-
-          if echo "$FILE_OUTPUT" | grep -q "$TARGET_ARCH"; then
-            echo "pty.node architecture verified: $TARGET_ARCH"
-          else
-            echo "::error::pty.node architecture mismatch! Expected $TARGET_ARCH but got: $FILE_OUTPUT"
-            exit 1
-          fi
+          echo "All native modules verified for $TARGET_ARCH"
 
       - name: Patch product.json for Open VSX marketplace
         if: steps.check.outputs.skip != 'true'
