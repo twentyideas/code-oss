@@ -20,30 +20,18 @@ When merging from `microsoft/vscode`, resolve conflicts by re-applying the chang
 
 ## Modified Upstream Files
 
-### `product.json`
+### `src/vs/server/node/webClientServer.ts`
 
-**Change 1: Remove `defaultChatAgent` block**
+**Change: Hide chat panel on first start via `configurationDefaults`**
 
-**Purpose:** Prevent VS Code from showing the GitHub Copilot welcome overlay, install prompts, and AI panel on startup. DevSwarm has its own onboarding experience.
+**Purpose:** Prevent the GitHub Copilot chat panel (secondary sidebar) from appearing on first launch. DevSwarm has its own onboarding experience. Rather than removing `defaultChatAgent` from `product.json` and `product.ts` (which broke `DefaultAccountService` and 34+ other consumers at startup), this takes a configuration-over-code approach that minimizes upstream merge conflicts.
 
-**Action on merge:** If upstream modifies `defaultChatAgent`, discard their changes to that block. The entire `defaultChatAgent` key and its contents should be deleted from the file.
+**Details:** Adds a `configurationDefaults` property to the web client server options object that sets `workbench.secondarySideBar.defaultVisibility` to `'hidden'`. This is a single property addition to an existing config object — no upstream code is removed.
 
-**Change 2: Clear `trustedExtensionAuthAccess`**
-
-**Purpose:** The upstream value only granted `GitHub.copilot-chat` access to GitHub auth providers. With Copilot removed, this should be empty.
-
-**Action on merge:** Replace the upstream `trustedExtensionAuthAccess` value with an empty object:
-```json
-"trustedExtensionAuthAccess": {}
+**Action on merge:** If upstream modifies the options object in the `WebClientServer` class's method that constructs the client data (around the `callbackRoute` property), ensure the `configurationDefaults` block is preserved:
+```typescript
+configurationDefaults: {
+	'workbench.secondarySideBar.defaultVisibility': 'hidden'
+}
 ```
-If upstream adds non-Copilot entries here in the future, keep those and only remove Copilot-related ones.
-
----
-
-### `src/vs/platform/product/common/product.ts`
-
-**Change: Remove hardcoded `defaultChatAgent` fallback**
-
-**Purpose:** The dev-mode fallback (when `product.json` is empty) also hardcodes a `defaultChatAgent` with Copilot extension IDs. This must be removed to match the `product.json` change.
-
-**Action on merge:** In the `Object.keys(product).length === 0` block (the "Running out of sources" fallback), ensure there is no `defaultChatAgent` property in the `Object.assign` call. The block should end after `serverLicenseUrl` with no trailing comma or additional properties. If upstream adds other properties to this block, keep them — only remove `defaultChatAgent`.
+This is additive, so conflicts are unlikely unless upstream restructures the options object entirely.

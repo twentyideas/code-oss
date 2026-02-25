@@ -7,7 +7,7 @@
 
 ## Summary
 
-The DevSwarm customization approach is well-architected. Almost everything uses standard VS Code extension APIs and runtime configuration rather than patching VS Code internals. Only changes to files that ship *inside* the bundle and can't be overridden from outside belong in the fork (`product.json` configuration, Copilot removal). Everything else correctly stays in DevSwarm.
+The DevSwarm customization approach is well-architected. Almost everything uses standard VS Code extension APIs and runtime configuration rather than patching VS Code internals. Only changes to files that ship *inside* the bundle and can't be overridden from outside belong in the fork (`product.json` marketplace configuration, hiding the Copilot chat panel via server-side configuration defaults). Everything else correctly stays in DevSwarm.
 
 **One cleanup item:** The duplicate Open VSX patch in DevSwarm's `scripts/compile-vscode.sh` is redundant now that the fork CI handles it.
 
@@ -20,7 +20,7 @@ The DevSwarm customization approach is well-architected. Almost everything uses 
 | # | Customization | Files | Status |
 |---|---------------|-------|--------|
 | 1 | **Open VSX marketplace** — patched into `product.json` during CI | `.github/workflows/build-vscode-server.yml` (lines 83-106) | Merged on `main` |
-| 2 | **Remove Copilot/defaultChatAgent** — prevents Copilot welcome overlay, install prompts, AI panel | `product.json`, `src/vs/platform/product/common/product.ts` | [PR #7](https://github.com/twentyideas/code-oss/pull/7) (open, mergeable) |
+| 2 | **Hide chat panel on first start** — hides secondary sidebar (Copilot chat) by default via `configurationDefaults` instead of removing `defaultChatAgent` (which broke 34+ consumers) | `src/vs/server/node/webClientServer.ts` | [PR #7](https://github.com/twentyideas/code-oss/pull/7) (open, mergeable) |
 
 **Supporting documentation:**
 - Branch `add-fork-documentation` has a `FORK.md` with merge-conflict resolution instructions for each divergence. Should be merged alongside or after PR #7.
@@ -63,7 +63,7 @@ The DevSwarm customization approach is well-architected. Almost everything uses 
 | # | Customization | Status | Next Step |
 |---|---------------|--------|-----------|
 | 1 | Open VSX marketplace (CI) | Merged on `main` | Done |
-| 2 | Remove Copilot defaults | PR #7 open | Merge PR #7, then merge `add-fork-documentation` branch for `FORK.md` |
+| 2 | Hide chat panel by default | PR #7 open | Merge PR #7, then merge `add-fork-documentation` branch for `FORK.md` |
 
 ---
 
@@ -71,7 +71,7 @@ The DevSwarm customization approach is well-architected. Almost everything uses 
 
 **Fork only what can't be overridden from outside the bundle.** Specifically:
 
-- **Fork:** `product.json` fields (marketplace config, Copilot removal) and hardcoded fallbacks in TypeScript source
+- **Fork:** `product.json` fields (marketplace config) and server-side configuration defaults (hiding Copilot chat panel)
 - **Runtime:** Extensions (via `extensions/` dir), settings (via `Machine/settings.json`), Electron shell behavior
 
 This keeps the fork minimal, reduces merge conflicts with upstream `microsoft/vscode`, and lets DevSwarm-specific features evolve on their own release cadence.
