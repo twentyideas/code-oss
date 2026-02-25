@@ -143,5 +143,9 @@ function f(x: number, y: string): void { }
 - Use `IEditorService` to open editors instead of `IEditorGroupsService.activeGroup.openEditor` to ensure that the editor opening logic is properly followed and to avoid bypassing important features such as `revealIfOpened` or `preserveFocus`.
 - Avoid using `bind()`, `call()` and `apply()` solely to control `this` or partially apply arguments; prefer arrow functions or closures to capture the necessary context, and use these methods only when required by an API or interoperability.
 
+## Fork Information
+
+This is a fork of `microsoft/vscode` for DevSwarm. See `FORK.md` in the repo root for a complete list of intentional divergences from upstream. **When merging from upstream, always consult `FORK.md` to resolve conflicts correctly and re-apply fork customizations.**
+
 ## Learnings
 - Minimize the amount of assertions in tests. Prefer one snapshot-style `assert.deepStrictEqual` over multiple precise assertions, as they are much more difficult to understand and to update.
