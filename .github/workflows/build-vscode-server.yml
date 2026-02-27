@@ -11,9 +11,15 @@ on:
         description: "Platforms to build (comma-separated). Options: darwin-arm64, win32-x64, linux-x64"
         required: false
         default: "all"
+  pull_request:
+    types: [labeled]
 
 jobs:
   build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'build-bundle'))
     strategy:
       fail-fast: false
       matrix:
@@ -35,7 +41,15 @@ jobs:
         id: check
         shell: bash
         run: |
-          if [[ "${{ inputs.platforms }}" == "all" ]] || [[ "${{ inputs.platforms }}" == *"${{ matrix.platform }}"* ]]; then
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # PR builds: only darwin-arm64
+            if [[ "${{ matrix.platform }}" == "darwin-arm64" ]]; then
+              echo "skip=false" >> $GITHUB_OUTPUT
+            else
+              echo "Skipping ${{ matrix.platform }} (PR builds are darwin-arm64 only)"
+              echo "skip=true" >> $GITHUB_OUTPUT
+            fi
+          elif [[ "${{ inputs.platforms }}" == "all" ]] || [[ "${{ inputs.platforms }}" == *"${{ matrix.platform }}"* ]]; then
             echo "skip=false" >> $GITHUB_OUTPUT
           else
             echo "Skipping ${{ matrix.platform }} (not in: ${{ inputs.platforms }})"
@@ -182,6 +196,7 @@ jobs:
 
   release:
     needs: build
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write

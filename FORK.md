@@ -14,6 +14,8 @@ When merging from `microsoft/vscode`, resolve conflicts by re-applying the chang
 
 **Details:** This file does not exist upstream, so it will never conflict on merge. It builds `vscode-reh-web` tarballs for darwin-arm64, win32-x64, and linux-x64, patches `product.json` to use the Open VSX marketplace, and creates a GitHub Release.
 
+**PR build trigger:** Adding the `build-bundle` label to a PR triggers a darwin-arm64-only build. The artifact is available on the workflow run for download via `DEVSWARM_VSCODE_SERVER_VERSION=pr-{N} pnpm install` in the main repo. The release job is skipped for PR builds.
+
 **Action on merge:** None required — no conflict possible.
 
 ---
