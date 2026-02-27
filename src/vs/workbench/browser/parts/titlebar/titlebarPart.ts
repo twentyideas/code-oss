@@ -277,6 +277,17 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	private readonly layoutToolbarMenuDisposables = this._register(new DisposableStore());
 	private readonly activityToolbarDisposables = this._register(new DisposableStore());
 
+	// DevSwarm: contributed title bar toolbars
+	private titleBarNavigationElement: HTMLElement | undefined;
+	private titleBarNavigationToolbar: WorkbenchToolBar | undefined;
+	private titleBarNavigationMenu: IMenu | undefined;
+	private readonly titleBarNavigationDisposables = this._register(new DisposableStore());
+
+	private titleBarActionsElement: HTMLElement | undefined;
+	private titleBarActionsToolbar: WorkbenchToolBar | undefined;
+	private titleBarActionsMenu: IMenu | undefined;
+	private readonly titleBarActionsDisposables = this._register(new DisposableStore());
+
 	private readonly hoverDelegate: IHoverDelegate;
 
 	private readonly titleDisposables = this._register(new DisposableStore());
@@ -472,9 +483,15 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			this.installMenubar();
 		}
 
+		// DevSwarm: TitleBarNavigation toolbar (after menubar in left content)
+		this.createTitleBarNavigationToolbar();
+
 		// Title
 		this.title = append(this.centerContent, $('div.window-title'));
 		this.createTitle();
+
+		// DevSwarm: TitleBarActions toolbar (before existing action toolbar in right content)
+		this.createTitleBarActionsToolbar();
 
 		// Create Toolbar Actions
 		if (hasCustomTitlebar(this.configurationService, this.titleBarStyle)) {
@@ -743,6 +760,82 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		}
 
 		updateToolBarActions();
+	}
+
+	// --- DevSwarm: TitleBarNavigation toolbar ---
+
+	private createTitleBarNavigationToolbar(): void {
+		this.titleBarNavigationDisposables.clear();
+
+		this.titleBarNavigationElement = append(this.leftContent, $('div.titlebar-navigation'));
+
+		this.titleBarNavigationMenu = this.menuService.createMenu(
+			MenuId.TitleBarNavigation,
+			this.contextKeyService
+		);
+		this.titleBarNavigationDisposables.add(this.titleBarNavigationMenu);
+
+		this.titleBarNavigationToolbar = this.titleBarNavigationDisposables.add(this.instantiationService.createInstance(
+			WorkbenchToolBar,
+			this.titleBarNavigationElement,
+			{
+				orientation: ActionsOrientation.HORIZONTAL,
+				hoverDelegate: this.hoverDelegate,
+			}
+		));
+
+		this.titleBarNavigationDisposables.add(this.titleBarNavigationMenu.onDidChange(() => this.updateTitleBarNavigationToolbar()));
+		this.updateTitleBarNavigationToolbar();
+	}
+
+	private updateTitleBarNavigationToolbar(): void {
+		if (!this.titleBarNavigationMenu || !this.titleBarNavigationToolbar) {
+			return;
+		}
+
+		const actions: IToolbarActions = { primary: [], secondary: [] };
+		fillInActionBarActions(this.titleBarNavigationMenu.getActions(), actions);
+		this.titleBarNavigationToolbar.setActions(prepareActions(actions.primary), prepareActions(actions.secondary));
+
+		this.titleBarNavigationElement?.classList.toggle('has-no-actions', actions.primary.length === 0 && actions.secondary.length === 0);
+	}
+
+	// --- DevSwarm: TitleBarActions toolbar ---
+
+	private createTitleBarActionsToolbar(): void {
+		this.titleBarActionsDisposables.clear();
+
+		this.titleBarActionsElement = append(this.rightContent, $('div.titlebar-actions'));
+
+		this.titleBarActionsMenu = this.menuService.createMenu(
+			MenuId.TitleBarActions,
+			this.contextKeyService
+		);
+		this.titleBarActionsDisposables.add(this.titleBarActionsMenu);
+
+		this.titleBarActionsToolbar = this.titleBarActionsDisposables.add(this.instantiationService.createInstance(
+			WorkbenchToolBar,
+			this.titleBarActionsElement,
+			{
+				orientation: ActionsOrientation.HORIZONTAL,
+				hoverDelegate: this.hoverDelegate,
+			}
+		));
+
+		this.titleBarActionsDisposables.add(this.titleBarActionsMenu.onDidChange(() => this.updateTitleBarActionsToolbar()));
+		this.updateTitleBarActionsToolbar();
+	}
+
+	private updateTitleBarActionsToolbar(): void {
+		if (!this.titleBarActionsMenu || !this.titleBarActionsToolbar) {
+			return;
+		}
+
+		const actions: IToolbarActions = { primary: [], secondary: [] };
+		fillInActionBarActions(this.titleBarActionsMenu.getActions(), actions);
+		this.titleBarActionsToolbar.setActions(prepareActions(actions.primary), prepareActions(actions.secondary));
+
+		this.titleBarActionsElement?.classList.toggle('has-no-actions', actions.primary.length === 0 && actions.secondary.length === 0);
 	}
 
 	override updateStyles(): void {
