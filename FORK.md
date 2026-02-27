@@ -35,3 +35,33 @@ configurationDefaults: {
 }
 ```
 This is additive, so conflicts are unlikely unless upstream restructures the options object entirely.
+
+### `src/vs/platform/actions/common/actions.ts`
+
+**Change: Add TitleBarNavigation and TitleBarActions MenuId constants**
+
+**Purpose:** Allow extensions to contribute action buttons to the VS Code title bar via standard menu contribution points. DevSwarm uses this to place mode toggles, agent spawning, and merge controls in the title bar.
+
+**Details:** Adds two new `MenuId` static properties: `TitleBarNavigation` (left side of title bar, after menu bar) and `TitleBarActions` (right side of title bar, before layout controls). These are additive — no existing code is modified.
+
+**Action on merge:** Re-add the two static properties if the `MenuId` class definition changes.
+
+### `src/vs/workbench/browser/parts/titlebar/titlebarPart.ts`
+
+**Change: Render contributed actions from TitleBarNavigation and TitleBarActions menus**
+
+**Purpose:** Render extension-contributed toolbar items in the title bar alongside existing elements.
+
+**Details:** Adds two new `WorkbenchToolBar` instances in the title bar layout — one in `leftContent` (navigation) and one in `rightContent` (actions). Uses the standard `MenuWorkbenchToolBar` pattern already used for `MenuId.TitleBar`.
+
+**Action on merge:** If upstream restructures the title bar layout, re-add the toolbar containers and menu listeners in the appropriate locations.
+
+### `src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css`
+
+**Change: Add styles for TitleBarNavigation and TitleBarActions containers**
+
+**Purpose:** Style the new toolbar containers in the title bar.
+
+**Details:** Adds CSS for `.titlebar-navigation` and `.titlebar-actions` classes — flex containers with center alignment, appropriate margins, non-draggable app regions, and `has-no-actions` visibility toggle. These are new rules appended to the file — no existing styles modified.
+
+**Action on merge:** Re-add the CSS rules if the file is restructured.
