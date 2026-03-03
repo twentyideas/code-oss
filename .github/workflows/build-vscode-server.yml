@@ -136,6 +136,8 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         shell: bash
         run: npm run gulp "vscode-reh-web-${{ matrix.platform }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate native module architectures
         if: steps.check.outputs.skip != 'true' && runner.os == 'macOS'
