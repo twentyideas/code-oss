@@ -18,8 +18,11 @@ jobs:
   build:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'build-bundle'))
+      (github.event_name == 'pull_request' && (
+       contains(github.event.pull_request.labels.*.name, 'build-bundle') ||
+       contains(github.event.pull_request.labels.*.name, 'build-bundle-darwin') ||
+       contains(github.event.pull_request.labels.*.name, 'build-bundle-win32') ||
+       contains(github.event.pull_request.labels.*.name, 'build-bundle-linux')))
     strategy:
       fail-fast: false
       matrix:
@@ -40,19 +43,35 @@ jobs:
       - name: Check if platform is selected
         id: check
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MATRIX_PLATFORM: ${{ matrix.platform }}
+          INPUT_PLATFORMS: ${{ inputs.platforms }}
+          # PR label checks use the if: condition syntax above, so we just
+          # need to know which platforms were requested via labels.
+          HAS_BUILD_BUNDLE: ${{ contains(github.event.pull_request.labels.*.name, 'build-bundle') }}
+          HAS_DARWIN: ${{ contains(github.event.pull_request.labels.*.name, 'build-bundle-darwin') }}
+          HAS_WIN32: ${{ contains(github.event.pull_request.labels.*.name, 'build-bundle-win32') }}
+          HAS_LINUX: ${{ contains(github.event.pull_request.labels.*.name, 'build-bundle-linux') }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # PR builds: only darwin-arm64
-            if [[ "${{ matrix.platform }}" == "darwin-arm64" ]]; then
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            # build-bundle = all platforms
+            if [[ "$HAS_BUILD_BUNDLE" == "true" ]]; then
+              echo "skip=false" >> $GITHUB_OUTPUT
+            elif [[ "$MATRIX_PLATFORM" == "darwin-arm64" && "$HAS_DARWIN" == "true" ]]; then
+              echo "skip=false" >> $GITHUB_OUTPUT
+            elif [[ "$MATRIX_PLATFORM" == "win32-x64" && "$HAS_WIN32" == "true" ]]; then
+              echo "skip=false" >> $GITHUB_OUTPUT
+            elif [[ "$MATRIX_PLATFORM" == "linux-x64" && "$HAS_LINUX" == "true" ]]; then
               echo "skip=false" >> $GITHUB_OUTPUT
             else
-              echo "Skipping ${{ matrix.platform }} (PR builds are darwin-arm64 only)"
+              echo "Skipping $MATRIX_PLATFORM (no matching build-bundle label)"
               echo "skip=true" >> $GITHUB_OUTPUT
             fi
-          elif [[ "${{ inputs.platforms }}" == "all" ]] || [[ "${{ inputs.platforms }}" == *"${{ matrix.platform }}"* ]]; then
+          elif [[ "$INPUT_PLATFORMS" == "all" ]] || [[ "$INPUT_PLATFORMS" == *"$MATRIX_PLATFORM"* ]]; then
             echo "skip=false" >> $GITHUB_OUTPUT
           else
-            echo "Skipping ${{ matrix.platform }} (not in: ${{ inputs.platforms }})"
+            echo "Skipping $MATRIX_PLATFORM (not in: $INPUT_PLATFORMS)"
             echo "skip=true" >> $GITHUB_OUTPUT
           fi
 

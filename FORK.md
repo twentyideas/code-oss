@@ -14,7 +14,13 @@ When merging from `microsoft/vscode`, resolve conflicts by re-applying the chang
 
 **Details:** This file does not exist upstream, so it will never conflict on merge. It builds `vscode-reh-web` tarballs for darwin-arm64, win32-x64, and linux-x64, patches `product.json` to use the Open VSX marketplace, and creates a GitHub Release.
 
-**PR build trigger:** Adding the `build-bundle` label to a PR triggers a darwin-arm64-only build. The artifact is available on the workflow run for download via `DEVSWARM_VSCODE_SERVER_VERSION=pr-{N} pnpm install` in the main repo. The release job is skipped for PR builds.
+**PR build trigger:** Adding a `build-bundle` label to a PR triggers builds. Label options:
+- `build-bundle` — all platforms (darwin-arm64, win32-x64, linux-x64)
+- `build-bundle-darwin` — darwin-arm64 only
+- `build-bundle-win32` — win32-x64 only
+- `build-bundle-linux` — linux-x64 only
+
+Multiple platform labels can be combined. The artifact is available on the workflow run for download via `DEVSWARM_VSCODE_SERVER_VERSION=pr-{N} pnpm install` in the main repo. The release job is skipped for PR builds.
 
 **Action on merge:** None required — no conflict possible.
 
@@ -48,6 +54,16 @@ This is additive, so conflicts are unlikely unless upstream restructures the opt
 
 **Action on merge:** Re-add the two static properties if the `MenuId` class definition changes.
 
+### `src/vs/workbench/services/actions/common/menusExtensionPoint.ts`
+
+**Change: Register TitleBarNavigation and TitleBarActions as extension API menus**
+
+**Purpose:** Allow extensions to contribute commands to the title bar contribution points via `package.json` menu declarations (e.g., `"titleBar/navigation"` and `"titleBar/actions"`).
+
+**Details:** Adds two entries to the `apiMenus` array mapping the extension-facing menu keys `titleBar/navigation` and `titleBar/actions` to the corresponding `MenuId.TitleBarNavigation` and `MenuId.TitleBarActions` constants. These are additive — no existing entries are modified.
+
+**Action on merge:** Re-add the two `apiMenus` entries if the array is restructured.
+
 ### `src/vs/workbench/browser/parts/titlebar/titlebarPart.ts`
 
 **Change: Render contributed actions from TitleBarNavigation and TitleBarActions menus**
@@ -67,3 +83,13 @@ This is additive, so conflicts are unlikely unless upstream restructures the opt
 **Details:** Adds CSS for `.titlebar-navigation` and `.titlebar-actions` classes — flex containers with center alignment, appropriate margins, non-draggable app regions, and `has-no-actions` visibility toggle. These are new rules appended to the file — no existing styles modified.
 
 **Action on merge:** Re-add the CSS rules if the file is restructured.
+
+### `src/vs/workbench/contrib/chat/browser/chatDebug/chatDebugEditor.ts`
+
+**Change: Fix visibility modifier on `setEditorVisible` override**
+
+**Purpose:** Resolve a TypeScript compilation error where the upstream `override` keyword without `protected` caused a build failure in our fork's TypeScript configuration.
+
+**Details:** Changes `override setEditorVisible(visible: boolean): void` to `protected override setEditorVisible(visible: boolean): void`. This is a single keyword addition — no logic changes.
+
+**Action on merge:** Check if upstream has fixed this independently. If the method signature has changed, verify the `protected` modifier is present. If upstream has added it, this entry can be removed.
