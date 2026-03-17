@@ -83,3 +83,13 @@ This is additive, so conflicts are unlikely unless upstream restructures the opt
 **Details:** Adds CSS for `.titlebar-navigation` and `.titlebar-actions` classes — flex containers with center alignment, appropriate margins, non-draggable app regions, and `has-no-actions` visibility toggle. These are new rules appended to the file — no existing styles modified.
 
 **Action on merge:** Re-add the CSS rules if the file is restructured.
+
+### `build/lib/compilation.ts`
+
+**Change: Whitelist `setEditorVisible` in mangler's implicit-public check**
+
+**Purpose:** Upstream `chatDebugEditor.ts` overrides the `protected setEditorVisible` method without the `protected` keyword, widening it to public. The mangler treats this as a fatal error. Rather than patching the upstream source file (which would create a recurring merge conflict), we add `'setEditorVisible'` to the existing `strictImplicitPublicHandling` whitelist alongside `'saveState'`.
+
+**Details:** Appends `'setEditorVisible'` to the `Set` passed to `computeNewFileContents()`. The mangler will log a warning instead of erroring.
+
+**Action on merge:** If the `computeNewFileContents` call changes, ensure `'setEditorVisible'` remains in the Set. Can be removed if upstream adds `protected` to the override in `chatDebugEditor.ts`.
