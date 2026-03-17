@@ -50,12 +50,14 @@ const apiMenus: IAPIMenu[] = [
 	{
 		key: 'titleBar/navigation',
 		id: MenuId.TitleBarNavigation,
-		description: localize('menus.titleBarNavigation', "The title bar navigation area (left side)")
+		description: localize('menus.titleBarNavigation', "The title bar navigation area (left side)"),
+		supportsSubmenus: false
 	},
 	{
 		key: 'titleBar/actions',
 		id: MenuId.TitleBarActions,
-		description: localize('menus.titleBarActions', "The title bar actions area (right side)")
+		description: localize('menus.titleBarActions', "The title bar actions area (right side)"),
+		supportsSubmenus: false
 	},
 	{
 		key: 'editor/title',

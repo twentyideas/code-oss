@@ -483,18 +483,17 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			this.installMenubar();
 		}
 
-		// DevSwarm: TitleBarNavigation toolbar (after menubar in left content)
-		this.createTitleBarNavigationToolbar();
-
 		// Title
 		this.title = append(this.centerContent, $('div.window-title'));
 		this.createTitle();
 
-		// DevSwarm: TitleBarActions toolbar (before existing action toolbar in right content)
-		this.createTitleBarActionsToolbar();
-
 		// Create Toolbar Actions
 		if (hasCustomTitlebar(this.configurationService, this.titleBarStyle)) {
+			// DevSwarm: TitleBarNavigation toolbar (after menubar in left content)
+			this.createTitleBarNavigationToolbar();
+
+			// DevSwarm: TitleBarActions toolbar (before existing action toolbar in right content)
+			this.createTitleBarActionsToolbar();
 			this.actionToolBarElement = append(this.rightContent, $('div.action-toolbar-container'));
 			this.createActionToolBar();
 			this.createActionToolBarMenus();

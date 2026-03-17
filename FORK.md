@@ -60,7 +60,7 @@ This is additive, so conflicts are unlikely unless upstream restructures the opt
 
 **Purpose:** Allow extensions to contribute commands to the title bar contribution points via `package.json` menu declarations (e.g., `"titleBar/navigation"` and `"titleBar/actions"`).
 
-**Details:** Adds two entries to the `apiMenus` array mapping the extension-facing menu keys `titleBar/navigation` and `titleBar/actions` to the corresponding `MenuId.TitleBarNavigation` and `MenuId.TitleBarActions` constants. These are additive — no existing entries are modified.
+**Details:** Adds two entries to the `apiMenus` array mapping the extension-facing menu keys `titleBar/navigation` and `titleBar/actions` to the corresponding `MenuId.TitleBarNavigation` and `MenuId.TitleBarActions` constants. Both set `supportsSubmenus: false` since these are horizontal toolbar menus. These are additive — no existing entries are modified.
 
 **Action on merge:** Re-add the two `apiMenus` entries if the array is restructured.
 
@@ -83,13 +83,3 @@ This is additive, so conflicts are unlikely unless upstream restructures the opt
 **Details:** Adds CSS for `.titlebar-navigation` and `.titlebar-actions` classes — flex containers with center alignment, appropriate margins, non-draggable app regions, and `has-no-actions` visibility toggle. These are new rules appended to the file — no existing styles modified.
 
 **Action on merge:** Re-add the CSS rules if the file is restructured.
-
-### `src/vs/workbench/contrib/chat/browser/chatDebug/chatDebugEditor.ts`
-
-**Change: Fix visibility modifier on `setEditorVisible` override**
-
-**Purpose:** Resolve a TypeScript compilation error where the upstream `override` keyword without `protected` caused a build failure in our fork's TypeScript configuration.
-
-**Details:** Changes `override setEditorVisible(visible: boolean): void` to `protected override setEditorVisible(visible: boolean): void`. This is a single keyword addition — no logic changes.
-
-**Action on merge:** Check if upstream has fixed this independently. If the method signature has changed, verify the `protected` modifier is present. If upstream has added it, this entry can be removed.
