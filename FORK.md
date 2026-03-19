@@ -14,6 +14,14 @@ When merging from `microsoft/vscode`, resolve conflicts by re-applying the chang
 
 **Details:** This file does not exist upstream, so it will never conflict on merge. It builds `vscode-reh-web` tarballs for darwin-arm64, win32-x64, and linux-x64, patches `product.json` to use the Open VSX marketplace, and creates a GitHub Release.
 
+**PR build trigger:** Adding a `build-bundle` label to a PR triggers builds. Label options:
+- `build-bundle` — all platforms (darwin-arm64, win32-x64, linux-x64)
+- `build-bundle-darwin` — darwin-arm64 only
+- `build-bundle-win32` — win32-x64 only
+- `build-bundle-linux` — linux-x64 only
+
+Multiple platform labels can be combined. The artifact is available on the workflow run for download via `DEVSWARM_VSCODE_SERVER_VERSION=pr-{N} pnpm install` in the main repo. The release job is skipped for PR builds.
+
 **Action on merge:** None required — no conflict possible.
 
 ---
@@ -35,3 +43,53 @@ configurationDefaults: {
 }
 ```
 This is additive, so conflicts are unlikely unless upstream restructures the options object entirely.
+
+### `src/vs/platform/actions/common/actions.ts`
+
+**Change: Add TitleBarNavigation and TitleBarActions MenuId constants**
+
+**Purpose:** Allow extensions to contribute action buttons to the VS Code title bar via standard menu contribution points. DevSwarm uses this to place mode toggles, agent spawning, and merge controls in the title bar.
+
+**Details:** Adds two new `MenuId` static properties: `TitleBarNavigation` (left side of title bar, after menu bar) and `TitleBarActions` (right side of title bar, before layout controls). These are additive — no existing code is modified.
+
+**Action on merge:** Re-add the two static properties if the `MenuId` class definition changes.
+
+### `src/vs/workbench/services/actions/common/menusExtensionPoint.ts`
+
+**Change: Register TitleBarNavigation and TitleBarActions as extension API menus**
+
+**Purpose:** Allow extensions to contribute commands to the title bar contribution points via `package.json` menu declarations (e.g., `"titleBar/navigation"` and `"titleBar/actions"`).
+
+**Details:** Adds two entries to the `apiMenus` array mapping the extension-facing menu keys `titleBar/navigation` and `titleBar/actions` to the corresponding `MenuId.TitleBarNavigation` and `MenuId.TitleBarActions` constants. Both set `supportsSubmenus: false` since these are horizontal toolbar menus. These are additive — no existing entries are modified.
+
+**Action on merge:** Re-add the two `apiMenus` entries if the array is restructured.
+
+### `src/vs/workbench/browser/parts/titlebar/titlebarPart.ts`
+
+**Change: Render contributed actions from TitleBarNavigation and TitleBarActions menus**
+
+**Purpose:** Render extension-contributed toolbar items in the title bar alongside existing elements.
+
+**Details:** Adds two new `WorkbenchToolBar` instances in the title bar layout — one in `leftContent` (navigation) and one in `rightContent` (actions). Uses the standard `MenuWorkbenchToolBar` pattern already used for `MenuId.TitleBar`.
+
+**Action on merge:** If upstream restructures the title bar layout, re-add the toolbar containers and menu listeners in the appropriate locations.
+
+### `src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css`
+
+**Change: Add styles for TitleBarNavigation and TitleBarActions containers**
+
+**Purpose:** Style the new toolbar containers in the title bar.
+
+**Details:** Adds CSS for `.titlebar-navigation` and `.titlebar-actions` classes — flex containers with center alignment, appropriate margins, non-draggable app regions, and `has-no-actions` visibility toggle. These are new rules appended to the file — no existing styles modified.
+
+**Action on merge:** Re-add the CSS rules if the file is restructured.
+
+### `build/lib/compilation.ts`
+
+**Change: Whitelist `setEditorVisible` in mangler's implicit-public check**
+
+**Purpose:** Upstream `chatDebugEditor.ts` overrides the `protected setEditorVisible` method without the `protected` keyword, widening it to public. The mangler treats this as a fatal error. Rather than patching the upstream source file (which would create a recurring merge conflict), we add `'setEditorVisible'` to the existing `strictImplicitPublicHandling` whitelist alongside `'saveState'`.
+
+**Details:** Appends `'setEditorVisible'` to the `Set` passed to `computeNewFileContents()`. The mangler will log a warning instead of erroring.
+
+**Action on merge:** If the `computeNewFileContents` call changes, ensure `'setEditorVisible'` remains in the Set. Can be removed if upstream adds `protected` to the override in `chatDebugEditor.ts`.

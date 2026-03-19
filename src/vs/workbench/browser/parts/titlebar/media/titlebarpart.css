@@ -245,6 +245,34 @@
 	zoom: var(--zoom-factor); /* helps to position the menu properly when counter zooming */
 }
 
+/* DevSwarm: TitleBarNavigation toolbar (left content, after menubar) */
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left > .titlebar-navigation {
+	display: flex;
+	align-items: center;
+	margin-left: 8px;
+	z-index: 2500;
+	-webkit-app-region: no-drag;
+	height: 100%;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left > .titlebar-navigation.has-no-actions {
+	display: none;
+}
+
+/* DevSwarm: TitleBarActions toolbar (right content, before action toolbar) */
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .titlebar-actions {
+	display: flex;
+	align-items: center;
+	margin-right: 8px;
+	z-index: 2500;
+	-webkit-app-region: no-drag;
+	height: 100%;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .titlebar-actions.has-no-actions {
+	display: none;
+}
+
 /* Resizer */
 .monaco-workbench.windows .part.titlebar > .titlebar-container > .resizer,
 .monaco-workbench.linux .part.titlebar > .titlebar-container > .resizer {
