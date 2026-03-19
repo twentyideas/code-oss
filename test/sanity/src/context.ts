@@ -38,6 +38,7 @@ export class TestContext {
 	private readonly tempDirs = new Set<string>();
 	private readonly wslTempDirs = new Set<string>();
 	private nextPort = 3010;
+	private currentTestName: string | undefined;
 
 	public constructor(public readonly options: Readonly<{
 		quality: 'stable' | 'insider' | 'exploration';
@@ -47,6 +48,7 @@ export class TestContext {
 		checkSigning: boolean;
 		headlessBrowser: boolean;
 		downloadOnly: boolean;
+		screenshotsDir: string | undefined;
 	}>) {
 	}
 
@@ -88,6 +90,7 @@ export class TestContext {
 
 		const self = this;
 		return test(name, async function () {
+			self.currentTestName = name;
 			self.log(`Starting test: ${name}`);
 
 			const homeDir = os.homedir();
@@ -102,6 +105,8 @@ export class TestContext {
 				throw error;
 
 			} finally {
+				self.currentTestName = undefined;
+
 				process.chdir(homeDir);
 				self.log(`Changed working directory to: ${homeDir}`);
 
@@ -136,8 +141,17 @@ export class TestContext {
 	public error(message: string): never {
 		const line = `[${new Date().toISOString()}] ERROR: ${message}`;
 		this.consoleOutputs.push(line);
-		console.error(line);
+		console.error(`##vso[task.logissue type=error]${line}`);
 		throw new Error(message);
+	}
+
+	/**
+	 * Logs a warning message with a timestamp.
+	 */
+	public warn(message: string) {
+		const line = `[${new Date().toISOString()}] WARNING: ${message}`;
+		this.consoleOutputs.push(line);
+		console.warn(`##vso[task.logissue type=warning]${line}`);
 	}
 
 	/**
@@ -215,7 +229,7 @@ export class TestContext {
 				fs.rmSync(dir, { recursive: true, force: true });
 				this.log(`Deleted temp directory: ${dir}`);
 			} catch (error) {
-				this.log(`Failed to delete temp directory: ${dir}: ${error}`);
+				this.warn(`Failed to delete temp directory: ${dir}: ${error}`);
 			}
 		}
 		this.tempDirs.clear();
@@ -224,7 +238,7 @@ export class TestContext {
 			try {
 				this.deleteWslDir(dir);
 			} catch (error) {
-				this.log(`Failed to delete WSL temp directory: ${dir}: ${error}`);
+				this.warn(`Failed to delete WSL temp directory: ${dir}: ${error}`);
 			}
 		}
 		this.wslTempDirs.clear();
@@ -242,7 +256,7 @@ export class TestContext {
 		for (let attempt = 0; attempt < maxRetries; attempt++) {
 			if (attempt > 0) {
 				const delay = Math.pow(2, attempt - 1) * 1000;
-				this.log(`Retrying fetch (attempt ${attempt + 1}/${maxRetries}) after ${delay}ms`);
+				this.warn(`Retrying fetch (attempt ${attempt + 1}/${maxRetries}) after ${delay}ms`);
 				await new Promise(resolve => setTimeout(resolve, delay));
 			}
 
@@ -261,7 +275,7 @@ export class TestContext {
 				return response as Response & { body: NodeJS.ReadableStream };
 			} catch (error) {
 				lastError = error instanceof Error ? error : new Error(String(error));
-				this.log(`Fetch attempt ${attempt + 1} failed: ${lastError.message}`);
+				this.warn(`Fetch attempt ${attempt + 1} failed: ${lastError.message}`);
 			}
 		}
 
@@ -1071,6 +1085,26 @@ export class TestContext {
 	}
 
 	/**
+	 * Captures a screenshot of the current page if one is active.
+	 */
+	public async captureScreenshot(page: Page) {
+		if (!this.currentTestName) {
+			return;
+		}
+
+		try {
+			const screenshotDir = this.options.screenshotsDir ?? path.join(this.osTempDir, 'vscode-sanity-screenshots');
+			fs.mkdirSync(screenshotDir, { recursive: true });
+			const sanitizedName = this.currentTestName.replace(/[^a-zA-Z0-9_-]/g, '_');
+			const screenshotPath = path.join(screenshotDir, `${sanitizedName}.png`);
+			await page.screenshot({ path: screenshotPath, fullPage: true });
+			this.log(`Screenshot saved to: ${screenshotPath}`);
+		} catch (e) {
+			this.warn(`Failed to capture screenshot: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	}
+
+	/**
 	 * Constructs a web server URL with optional token and folder parameters.
 	 * @param port The port number of the web server.
 	 * @param token The optional authentication token.
@@ -1165,7 +1199,7 @@ export class TestContext {
 			await new Promise<void>((resolve, reject) => {
 				app.stderr.on('data', (data) => {
 					const text = `[${name}] ${data.toString().trim()}`;
-					if (/ECONNRESET/.test(text)) {
+					if (/ECONNRESET|ECONNABORTED/.test(text)) {
 						this.log(text);
 					} else {
 						reject(new Error(text));
