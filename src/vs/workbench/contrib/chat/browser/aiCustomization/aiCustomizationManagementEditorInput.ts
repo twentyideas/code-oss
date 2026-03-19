@@ -6,7 +6,7 @@
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { localize } from '../../../../../nls.js';
-import { IUntypedEditorInput } from '../../../../common/editor.js';
+import { IUntypedEditorInput, EditorInputCapabilities } from '../../../../common/editor.js';
 import { EditorInput } from '../../../../common/editor/editorInput.js';
 import { AI_CUSTOMIZATION_MANAGEMENT_EDITOR_INPUT_ID } from './aiCustomizationManagement.js';
 
@@ -20,9 +20,11 @@ export class AICustomizationManagementEditorInput extends EditorInput {
 
 	readonly resource = undefined;
 
-	private static _instance: AICustomizationManagementEditorInput | undefined;
+	override get capabilities(): EditorInputCapabilities {
+		return super.capabilities | EditorInputCapabilities.Singleton | EditorInputCapabilities.RequiresModal;
+	}
 
-	private _sectionLabel: string | undefined;
+	private static _instance: AICustomizationManagementEditorInput | undefined;
 
 	/**
 	 * Gets or creates the singleton instance of this input.
@@ -47,20 +49,7 @@ export class AICustomizationManagementEditorInput extends EditorInput {
 	}
 
 	override getName(): string {
-		if (this._sectionLabel) {
-			return localize('aiCustomizationManagementEditorNameWithSection', "Customizations: {0}", this._sectionLabel);
-		}
-		return localize('aiCustomizationManagementEditorName', "Customizations");
-	}
-
-	/**
-	 * Updates the section label shown in the editor tab title.
-	 */
-	setSectionLabel(label: string): void {
-		if (this._sectionLabel !== label) {
-			this._sectionLabel = label;
-			this._onDidChangeLabel.fire();
-		}
+		return localize('aiCustomizationManagementEditorName', "Chat Customizations");
 	}
 
 	override getIcon(): ThemeIcon {
