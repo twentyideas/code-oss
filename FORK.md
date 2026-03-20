@@ -14,7 +14,7 @@ When merging from `microsoft/vscode`, resolve conflicts by re-applying the chang
 
 **Details:** This file does not exist upstream, so it will never conflict on merge. It builds `vscode-reh-web` tarballs for darwin-arm64, win32-x64, and linux-x64, patches `product.json` to use the Open VSX marketplace, and creates a GitHub Release.
 
-**Building from upstream release tags:** When `vscode_ref` is set to an upstream tag (e.g. `1.112.0`), the workflow automatically applies fork patches on top of the clean upstream code. It does this by computing the diff between the upstream merge base on `main` and `main` itself, restricted to only the fork-modified files listed below. This means fork customizations are always applied without requiring manual cherry-picks or release branches. If a fork patch fails to apply cleanly against a given tag, the build will fail with a clear `git apply` error — indicating the fork patch needs updating for that upstream version.
+**Building from upstream release tags:** When `vscode_ref` is set to an upstream tag (e.g. `1.112.0`), the workflow automatically applies fork patches on top of the clean upstream code. It diffs the upstream merge base on `main` against `main` itself to compute the full fork delta, then applies it with `--3way`. No manual maintenance is needed — any change on `main` is automatically included. If a patch fails to apply cleanly against a given tag, the build will fail with a clear `git apply` error.
 
 **PR build trigger:** Adding a `build-bundle` label to a PR triggers builds. Label options:
 - `build-bundle` — all platforms (darwin-arm64, win32-x64, linux-x64)
@@ -23,8 +23,6 @@ When merging from `microsoft/vscode`, resolve conflicts by re-applying the chang
 - `build-bundle-linux` — linux-x64 only
 
 Multiple platform labels can be combined. The artifact is available on the workflow run for download via `DEVSWARM_VSCODE_SERVER_VERSION=pr-{N} pnpm install` in the main repo. The release job is skipped for PR builds.
-
-**Maintaining fork patches:** When you add or modify a fork customization on `main`, also update the `FORK_FILES` array in the "Apply fork patches" step of this workflow to include any new files. Existing files are handled automatically.
 
 **Action on merge:** None required — no conflict possible.
 

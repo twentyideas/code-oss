@@ -92,15 +92,8 @@ jobs:
           VSCODE_REF: ${{ inputs.vscode_ref }}
         run: |
           # When building from an upstream ref (e.g. a release tag), our fork
-          # customizations aren't present. This step computes the fork delta
-          # from the main branch and applies it on top of the upstream ref.
-          #
-          # How it works:
-          # 1. Find the last merge from microsoft/vscode into main
-          # 2. Diff that upstream base against main for only fork-modified files
-          # 3. Apply the diff with --3way to handle minor context differences
-          #
-          # Fork-modified files are documented in FORK.md.
+          # customizations aren't present. This step computes the full fork
+          # delta from main and applies it on top of the upstream ref.
 
           git fetch origin main
 
@@ -117,25 +110,15 @@ jobs:
           echo "Upstream base: $UPSTREAM_BASE"
           echo "Building ref: $VSCODE_REF"
 
-          # Compute the fork delta: what main changed vs the upstream base,
-          # restricted to only files we intentionally modify in our fork.
-          FORK_FILES=(
-            build/lib/compilation.ts
-            src/vs/server/node/webClientServer.ts
-            src/vs/platform/actions/common/actions.ts
-            src/vs/workbench/services/actions/common/menusExtensionPoint.ts
-            src/vs/workbench/browser/parts/titlebar/titlebarPart.ts
-            src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css
-          )
-
-          git diff "$UPSTREAM_BASE" origin/main -- "${FORK_FILES[@]}" > /tmp/fork-patches.diff
+          # Compute the fork delta: everything main changed vs upstream
+          git diff "$UPSTREAM_BASE" origin/main > /tmp/fork-patches.diff
 
           if [ ! -s /tmp/fork-patches.diff ]; then
             echo "No fork patches to apply"
             exit 0
           fi
 
-          echo "Applying fork patches..."
+          echo "Applying fork patches ($(grep -c '^diff --git' /tmp/fork-patches.diff) files)..."
           git apply --3way /tmp/fork-patches.diff
           echo "✓ Fork patches applied successfully"
 
