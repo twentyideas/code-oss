@@ -80,6 +80,47 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.vscode_ref || '' }}
+          # Full history needed when building from an upstream ref so we can
+          # compute and apply fork patches. Shallow clone when building from
+          # the default branch (fork patches are already present).
+          fetch-depth: ${{ inputs.vscode_ref != '' && 0 || 1 }}
+
+      - name: Apply fork patches
+        if: steps.check.outputs.skip != 'true' && inputs.vscode_ref != ''
+        shell: bash
+        env:
+          VSCODE_REF: ${{ inputs.vscode_ref }}
+        run: |
+          # When building from an upstream ref (e.g. a release tag), our fork
+          # customizations aren't present. This step computes the full fork
+          # delta from main and applies it on top of the upstream ref.
+
+          git fetch origin main
+
+          # Find the most recent upstream merge on main
+          UPSTREAM_MERGE=$(git log origin/main --merges --grep="microsoft" -1 --format=%H)
+          if [ -z "$UPSTREAM_MERGE" ]; then
+            echo "::error::Could not find upstream merge commit on main"
+            exit 1
+          fi
+
+          # The second parent of the merge is the upstream commit
+          UPSTREAM_BASE=$(git rev-parse "${UPSTREAM_MERGE}^2")
+          echo "Upstream merge commit: $UPSTREAM_MERGE"
+          echo "Upstream base: $UPSTREAM_BASE"
+          echo "Building ref: $VSCODE_REF"
+
+          # Compute the fork delta: everything main changed vs upstream
+          git diff "$UPSTREAM_BASE" origin/main > /tmp/fork-patches.diff
+
+          if [ ! -s /tmp/fork-patches.diff ]; then
+            echo "No fork patches to apply"
+            exit 0
+          fi
+
+          echo "Applying fork patches ($(grep -c '^diff --git' /tmp/fork-patches.diff) files)..."
+          git apply --3way /tmp/fork-patches.diff
+          echo "✓ Fork patches applied successfully"
 
       - name: Setup Node.js 22.x
         if: steps.check.outputs.skip != 'true'
