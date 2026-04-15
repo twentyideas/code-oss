@@ -17,7 +17,7 @@ import { ChatContextKeys } from '../../common/actions/chatContextKeys.js';
 import { ChatConfiguration } from '../../common/constants.js';
 import { IAgentPluginRepositoryService } from '../../common/plugins/agentPluginRepositoryService.js';
 import { IPluginInstallService } from '../../common/plugins/pluginInstallService.js';
-import { type IMarketplaceReference, MarketplaceReferenceKind, parseMarketplaceReferences } from '../../common/plugins/pluginMarketplaceService.js';
+import { type IMarketplaceReference, MarketplaceReferenceKind, parseMarketplaceReference, parseMarketplaceReferences } from '../../common/plugins/pluginMarketplaceService.js';
 import { IExtensionsWorkbenchService } from '../../../extensions/common/extensions.js';
 import { InstalledAgentPluginsViewId } from '../agentPluginsView.js';
 import { CHAT_CATEGORY, CHAT_CONFIG_MENU_ID } from './chatActions.js';
@@ -60,6 +60,7 @@ class InstallFromSourceAction extends Action2 {
 				when: ContextKeyExpr.and(
 					ContextKeyExpr.equals('view', InstalledAgentPluginsViewId),
 					ChatContextKeys.Setup.hidden.negate(),
+					ChatContextKeys.Setup.disabledInWorkspace.negate(),
 				),
 				group: 'navigation',
 				order: 1,
@@ -75,6 +76,7 @@ class InstallFromSourceAction extends Action2 {
 		const inputBox = store.add(quickInputService.createInputBox());
 		inputBox.placeholder = localize('pluginSourcePlaceholder', "owner/repo or git clone URL");
 		inputBox.prompt = localize('pluginSourcePrompt', "Enter a GitHub repository or git URL to install a plugin from");
+		inputBox.ignoreFocusOut = true;
 		inputBox.show();
 
 		store.add(inputBox.onDidChangeValue(() => {
@@ -112,6 +114,11 @@ class InstallFromSourceAction extends Action2 {
 						inputBox.validationMessage = result.message;
 					}
 					inputBox.show();
+				} else {
+					const ref = parseMarketplaceReference(source);
+					if (ref) {
+						accessor.get(IExtensionsWorkbenchService).openSearch(`@agentPlugins ${ref.displayLabel}`);
+					}
 				}
 			} finally {
 				inputBox.busy = false;
@@ -141,6 +148,7 @@ class ManagePluginMarketplacesAction extends Action2 {
 				when: ContextKeyExpr.and(
 					ContextKeyExpr.equals('view', InstalledAgentPluginsViewId),
 					ChatContextKeys.Setup.hidden.negate(),
+					ChatContextKeys.Setup.disabledInWorkspace.negate(),
 				),
 				group: 'navigation',
 				order: 2,

@@ -5,7 +5,6 @@
 
 import '../../workbench/browser/style.js';
 import './media/style.css';
-import { CollapsedSidebarWidget, CollapsedAuxiliaryBarWidget } from './collapsedPartWidgets.js';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { Emitter, Event, setGlobalLeakWarningThreshold } from '../../base/common/event.js';
 import { getActiveDocument, getActiveElement, getClientArea, getWindowId, getWindows, IDimension, isAncestorUsingFlowTo, size, Dimension, runWhenWindowIdle } from '../../base/browser/dom.js';
@@ -23,7 +22,7 @@ import { IEditorService } from '../../workbench/services/editor/common/editorSer
 import { IPaneCompositePartService } from '../../workbench/services/panecomposite/browser/panecomposite.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../workbench/common/views.js';
 import { ILogService } from '../../platform/log/common/log.js';
-import { IInstantiationService, ServicesAccessor, createDecorator } from '../../platform/instantiation/common/instantiation.js';
+import { IInstantiationService, ServicesAccessor } from '../../platform/instantiation/common/instantiation.js';
 import { ITitleService } from '../../workbench/services/title/browser/titleService.js';
 import { mainWindow, CodeWindow } from '../../base/browser/window.js';
 import { coalesce } from '../../base/common/arrays.js';
@@ -61,19 +60,8 @@ import { NotificationsToasts } from '../../workbench/browser/parts/notifications
 import { IMarkdownRendererService } from '../../platform/markdown/browser/markdownRenderer.js';
 import { EditorMarkdownCodeBlockRenderer } from '../../editor/browser/widget/markdownRenderer/browser/editorMarkdownCodeBlockRenderer.js';
 import { SyncDescriptor } from '../../platform/instantiation/common/descriptors.js';
-import { TitleService, TitlebarPart } from './parts/titlebarPart.js';
-import { URI } from '../../base/common/uri.js';
-import { IObservable } from '../../base/common/observable.js';
-
-/**
- * Minimal typing for ISessionsManagementService resolved dynamically to avoid
- * a layering import from vs/sessions/contrib/.
- */
-interface IMinimalSessionsManagementService {
-	getActiveSession(): { resource: URI } | undefined;
-	readonly activeSession: IObservable<unknown>;
-}
-const _ISessionsManagementService = createDecorator<IMinimalSessionsManagementService>('sessionsManagementService');
+import { TitleService } from './parts/titlebarPart.js';
+import { SessionsExperimentalShellGradientBackgroundSettingId } from '../common/configuration.js';
 
 //#region Workbench Options
 
@@ -95,6 +83,7 @@ enum LayoutClasses {
 	AUXILIARYBAR_HIDDEN = 'noauxiliarybar',
 	CHATBAR_HIDDEN = 'nochatbar',
 	STATUSBAR_HIDDEN = 'nostatusbar',
+	EXPERIMENTAL_SHELL_GRADIENT_BACKGROUND = 'experimental-shell-gradient-background',
 	FULLSCREEN = 'fullscreen',
 	MAXIMIZED = 'maximized'
 }
@@ -241,11 +230,9 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 	private sideBarPartView!: ISerializableView;
 	private panelPartView!: ISerializableView;
 	private auxiliaryBarPartView!: ISerializableView;
+	private editorPartView!: ISerializableView;
 
 	private chatBarPartView!: ISerializableView;
-
-	private collapsedSidebarWidget: CollapsedSidebarWidget | undefined;
-	private collapsedAuxiliaryBarWidget: CollapsedAuxiliaryBarWidget | undefined;
 
 	private readonly partVisibility: IPartVisibilityState = {
 		sidebar: true,
@@ -353,6 +340,12 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 				const notificationService = accessor.get(INotificationService) as NotificationService;
 				const markdownRendererService = accessor.get(IMarkdownRendererService);
 
+				// On web, the configuration service needs access to the
+				// instantiation service for dynamic configuration resolution.
+				if (isWeb && typeof (configurationService as IConfigurationService & { acquireInstantiationService?(i: IInstantiationService): void }).acquireInstantiationService === 'function') {
+					(configurationService as IConfigurationService & { acquireInstantiationService(i: IInstantiationService): void }).acquireInstantiationService(instantiationService);
+				}
+
 				// Set code block renderer for markdown rendering
 				markdownRendererService.setDefaultCodeBlockRenderer(instantiationService.createInstance(EditorMarkdownCodeBlockRenderer));
 
@@ -384,35 +377,6 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 
 				// Layout
 				this.layout();
-
-				// Collapsed Sidebar Widget (shown when sidebar is hidden)
-				const titlebarPart = this.getPart(Parts.TITLEBAR_PART) as TitlebarPart;
-				this.collapsedSidebarWidget = this._register(instantiationService.createInstance(CollapsedSidebarWidget, titlebarPart.leftContainer));
-				if (!this.partVisibility.sidebar) {
-					this.collapsedSidebarWidget.show();
-				}
-
-				// Auxiliary bar changes widget (always visible, acts as a toggle)
-				this.collapsedAuxiliaryBarWidget = this._register(instantiationService.createInstance(CollapsedAuxiliaryBarWidget, titlebarPart.rightContainer, titlebarPart.rightWindowControlsContainer));
-				this.collapsedAuxiliaryBarWidget.updateActiveState(this.partVisibility.auxiliaryBar);
-
-				// Wire active session provider after restore, when ISessionsManagementService is available.
-				// Resolved via createDecorator to avoid a layering import from vs/sessions/contrib/.
-				// Note: whenRestored is a deferred promise that resolves inside restore() below.
-				const auxWidget = this.collapsedAuxiliaryBarWidget;
-				this.whenRestored.then(() => {
-					instantiationService.invokeFunction(accessor => {
-						try {
-							const svc = accessor.get(_ISessionsManagementService);
-							auxWidget.setActiveSessionProvider(
-								() => svc.getActiveSession()?.resource,
-								Event.fromObservableLight(svc.activeSession)
-							);
-						} catch {
-							// Service not registered — indicators will remain empty
-						}
-					});
-				});
 
 				// Restore
 				this.restore(lifecycleService);
@@ -453,6 +417,7 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 	private registerListeners(lifecycleService: ILifecycleService, storageService: IStorageService, configurationService: IConfigurationService, hostService: IHostService, dialogService: IDialogService): void {
 		// Configuration changes
 		this._register(configurationService.onDidChangeConfiguration(e => this.updateFontAliasing(e, configurationService)));
+		this._register(configurationService.onDidChangeConfiguration(e => this.updateShellGradientBackground(e, configurationService)));
 
 		// Font Info
 		if (isNative) {
@@ -536,6 +501,17 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 		}
 	}
 
+	private updateShellGradientBackground(e: IConfigurationChangeEvent | undefined, configurationService: IConfigurationService): void {
+		if (e && !e.affectsConfiguration(SessionsExperimentalShellGradientBackgroundSettingId)) {
+			return;
+		}
+
+		this.mainContainer.classList.toggle(
+			LayoutClasses.EXPERIMENTAL_SHELL_GRADIENT_BACKGROUND,
+			configurationService.getValue<boolean>(SessionsExperimentalShellGradientBackgroundSettingId)
+		);
+	}
+
 	//#endregion
 
 	private renderWorkbench(instantiationService: IInstantiationService, notificationService: NotificationService, storageService: IStorageService, configurationService: IConfigurationService): void {
@@ -559,11 +535,12 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 
 		// Apply font aliasing
 		this.updateFontAliasing(undefined, configurationService);
+		this.updateShellGradientBackground(undefined, configurationService);
 
 		// Warm up font cache information before building up too many dom elements
 		this.restoreFontInfo(storageService, configurationService);
 
-		// Create Parts (excluding editor - it will be in a modal)
+		// Create Parts (editor starts hidden and is shown when an editor opens)
 		for (const { id, role, classes } of [
 			{ id: Parts.TITLEBAR_PART, role: 'none', classes: ['titlebar'] },
 			{ id: Parts.SIDEBAR_PART, role: 'none', classes: ['sidebar', 'left'] },
@@ -578,8 +555,8 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 			mark(`code/didCreatePart/${id}`);
 		}
 
-		// Create Editor Part (hidden — all editors open via MODAL_GROUP)
-		this.createHiddenEditorPart();
+		// Create Editor Part (hidden by default)
+		this.createEditorPart();
 
 		// Notification Handlers
 		this.createNotificationsHandlers(instantiationService, notificationService);
@@ -625,18 +602,15 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 		return part;
 	}
 
-	private createHiddenEditorPart(): void {
+	private createEditorPart(): void {
 		const editorPartContainer = document.createElement('div');
 		editorPartContainer.classList.add('part', 'editor');
 		editorPartContainer.id = Parts.EDITOR_PART;
 		editorPartContainer.setAttribute('role', 'main');
-		editorPartContainer.style.display = 'none';
 
 		mark('code/willCreatePart/workbench.parts.editor');
 		this.getPart(Parts.EDITOR_PART).create(editorPartContainer, { restorePreviousState: false });
 		mark('code/didCreatePart/workbench.parts.editor');
-
-		this.getPart(Parts.EDITOR_PART).layout(0, 0, 0, 0); // needed to make some view methods work
 
 		this.mainContainer.appendChild(editorPartContainer);
 	}
@@ -697,8 +671,17 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 		// Register layout listeners
 		this.registerLayoutListeners();
 
-		// Show editor part when an editor opens
-		this._register(this.editorService.onWillOpenEditor(() => {
+		// Keep background editor hidden for modal opens, only show for non-modal opens.
+		this._register(this.editorService.onWillOpenEditor(e => {
+			const isModalOpen = this.editorGroupService.activeModalEditorPart?.groups.some(group => group.id === e.groupId) ?? false;
+
+			if (isModalOpen) {
+				if (this.partVisibility.editor) {
+					this.setEditorHidden(true);
+				}
+				return;
+			}
+
 			if (!this.partVisibility.editor) {
 				this.setEditorHidden(false);
 			}
@@ -755,19 +738,21 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 		const sideBar = this.getPart(Parts.SIDEBAR_PART);
 		const chatBarPart = this.getPart(Parts.CHATBAR_PART);
 
-		// View references for parts in the grid (editor is NOT in grid)
+		// View references for parts in the grid
 		this.titleBarPartView = titleBar;
 		this.sideBarPartView = sideBar;
 		this.panelPartView = panelPart;
 		this.auxiliaryBarPartView = auxiliaryBarPart;
 		this.chatBarPartView = chatBarPart;
+		this.editorPartView = editorPart;
 
 		const viewMap: { [key: string]: ISerializableView } = {
 			[Parts.TITLEBAR_PART]: this.titleBarPartView,
 			[Parts.PANEL_PART]: this.panelPartView,
 			[Parts.SIDEBAR_PART]: this.sideBarPartView,
 			[Parts.AUXILIARYBAR_PART]: this.auxiliaryBarPartView,
-			[Parts.CHATBAR_PART]: this.chatBarPartView
+			[Parts.CHATBAR_PART]: this.chatBarPartView,
+			[Parts.EDITOR_PART]: this.editorPartView
 		};
 
 		const fromJSON = ({ type }: { type: string }) => viewMap[type];
@@ -783,7 +768,7 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 		this.workbenchGrid.edgeSnapping = this.mainWindowFullscreen;
 
 		// Listen for part visibility changes (for parts in grid)
-		for (const part of [titleBar, panelPart, sideBar, auxiliaryBarPart, chatBarPart]) {
+		for (const part of [titleBar, panelPart, sideBar, auxiliaryBarPart, chatBarPart, editorPart]) {
 			this._register(part.onDidVisibilityChange(visible => {
 				if (part === sideBar) {
 					this.setSideBarHidden(!visible);
@@ -793,19 +778,14 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 					this.setAuxiliaryBarHidden(!visible);
 				} else if (part === chatBarPart) {
 					this.setChatBarHidden(!visible);
+				} else if (part === editorPart) {
+					this.setEditorHidden(!visible);
 				}
 
 				this._onDidChangePartVisibility.fire({ partId: part.getId(), visible });
 				this.handleContainerDidLayout(this.mainContainer, this._mainContainerDimension);
 			}));
 		}
-
-		// Listen for editor part visibility changes (modal)
-		this._register(editorPart.onDidVisibilityChange(visible => {
-			this.setEditorHidden(!visible);
-			this._onDidChangePartVisibility.fire({ partId: editorPart.getId(), visible });
-			this.handleContainerDidLayout(this.mainContainer, this._mainContainerDimension);
-		}));
 	}
 
 	createWorkbenchManagement(_instantiationService: IInstantiationService): void {
@@ -814,27 +794,27 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 
 	/**
 	 * Creates the grid descriptor for the Agent Sessions layout.
-	 * Editor is NOT included - it's rendered as a modal overlay.
 	 *
 	 * Structure (horizontal orientation):
 	 * - Sidebar (left, spans full height from top to bottom)
 	 * - Right section (vertical):
 	 *   - Titlebar (top of right section)
-	 *   - Top right (horizontal): Chat Bar | Auxiliary Bar
-	 *   - Panel (below chat and auxiliary bar only)
+	 *   - Top right (horizontal): Chat Bar | Editor | Auxiliary Bar
+	 *   - Panel (below chat, editor, and auxiliary bar)
 	 */
 	private createGridDescriptor(): ISerializedGrid {
 		const { width, height } = this._mainContainerDimension;
 
 		// Default sizes
 		const sideBarSize = 300;
-		const auxiliaryBarSize = 340;
+		const editorSize = 650;
+		const auxiliaryBarSize = 380;
 		const panelSize = 300;
 		const titleBarHeight = this.titleBarPartView?.minimumHeight ?? 30;
 
 		// Calculate right section width and chat bar width
 		const rightSectionWidth = Math.max(0, width - sideBarSize);
-		const chatBarWidth = Math.max(0, rightSectionWidth - auxiliaryBarSize);
+		const chatBarWidth = Math.max(0, rightSectionWidth - auxiliaryBarSize - editorSize);
 
 		const contentHeight = height - titleBarHeight;
 		const topRightHeight = contentHeight - panelSize;
@@ -867,6 +847,13 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 			visible: this.partVisibility.chatBar
 		};
 
+		const editorNode: ISerializedLeafNode = {
+			type: 'leaf',
+			data: { type: Parts.EDITOR_PART },
+			size: editorSize,
+			visible: this.partVisibility.editor
+		};
+
 		const panelNode: ISerializedLeafNode = {
 			type: 'leaf',
 			data: { type: Parts.PANEL_PART },
@@ -874,10 +861,10 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 			visible: this.partVisibility.panel
 		};
 
-		// Top right section: Chat Bar | Auxiliary Bar (horizontal)
+		// Top right section: Chat Bar | Editor | Auxiliary Bar (horizontal)
 		const topRightSection: ISerializedNode = {
 			type: 'branch',
-			data: [chatBarNode, auxiliaryBarNode],
+			data: [chatBarNode, editorNode, auxiliaryBarNode],
 			size: topRightHeight
 		};
 
@@ -941,7 +928,7 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 			!this.partVisibility.panel ? LayoutClasses.PANEL_HIDDEN : undefined,
 			!this.partVisibility.auxiliaryBar ? LayoutClasses.AUXILIARYBAR_HIDDEN : undefined,
 			!this.partVisibility.chatBar ? LayoutClasses.CHATBAR_HIDDEN : undefined,
-			LayoutClasses.STATUSBAR_HIDDEN, // sessions window never has a status bar
+			LayoutClasses.STATUSBAR_HIDDEN, // agents window never has a status bar
 			this.mainWindowFullscreen ? LayoutClasses.FULLSCREEN : undefined
 		]);
 	}
@@ -1105,13 +1092,6 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 			!hidden,
 		);
 
-		// Toggle collapsed sidebar widget
-		if (hidden) {
-			this.collapsedSidebarWidget?.show();
-		} else {
-			this.collapsedSidebarWidget?.hide();
-		}
-
 		// If sidebar becomes hidden, also hide the current active pane composite
 		if (hidden && this.paneCompositeService.getActivePaneComposite(ViewContainerLocation.Sidebar)) {
 			this.paneCompositeService.hideActivePaneComposite(ViewContainerLocation.Sidebar);
@@ -1141,9 +1121,6 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 			!hidden,
 		);
 
-		// Update collapsed auxiliary bar widget active state
-		this.collapsedAuxiliaryBarWidget?.updateActiveState(!hidden);
-
 		// If auxiliary bar becomes hidden, also hide the current active pane composite
 		if (hidden && this.paneCompositeService.getActivePaneComposite(ViewContainerLocation.AuxiliaryBar)) {
 			this.paneCompositeService.hideActivePaneComposite(ViewContainerLocation.AuxiliaryBar);
@@ -1166,6 +1143,10 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 
 		this.partVisibility.editor = !hidden;
 		this.mainContainer.classList.toggle(LayoutClasses.MAIN_EDITOR_AREA_HIDDEN, hidden);
+
+		if (this.editorPartView) {
+			this.workbenchGrid.setViewVisible(this.editorPartView, !hidden);
+		}
 	}
 
 	private setPanelHidden(hidden: boolean): void {
@@ -1304,7 +1285,7 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 			case Parts.AUXILIARYBAR_PART:
 				return this.auxiliaryBarPartView;
 			case Parts.EDITOR_PART:
-				return undefined; // Editor is not in the grid, it's a modal
+				return this.editorPartView;
 			case Parts.PANEL_PART:
 				return this.panelPartView;
 			case Parts.CHATBAR_PART:
@@ -1442,7 +1423,9 @@ export class Workbench extends Disposable implements IWorkbenchLayoutService {
 		if (neighborView === this.auxiliaryBarPartView) {
 			return Parts.AUXILIARYBAR_PART;
 		}
-		// Editor is not in the grid - it's rendered as a modal
+		if (neighborView === this.editorPartView) {
+			return Parts.EDITOR_PART;
+		}
 		if (neighborView === this.panelPartView) {
 			return Parts.PANEL_PART;
 		}
