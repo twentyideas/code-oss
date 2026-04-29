@@ -10,7 +10,7 @@ import { parse as parseJSONC } from '../../../../../base/common/json.js';
 import { ResourceMap } from '../../../../../base/common/map.js';
 import { Schemas } from '../../../../../base/common/network.js';
 import { OS } from '../../../../../base/common/platform.js';
-import { basename, isEqualOrParent } from '../../../../../base/common/resources.js';
+import { basename, dirname, isEqualOrParent } from '../../../../../base/common/resources.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { localize } from '../../../../../nls.js';
@@ -62,7 +62,7 @@ export interface IAICustomizationListItem {
 	/** True when item comes from the default chat extension (grouped under Built-in). */
 	readonly isBuiltin?: boolean;
 	/** Display name of the contributing extension (for non-built-in extension items). */
-	readonly extensionLabel?: string;
+	readonly extensionId?: string;
 	/** Server-reported loading/sync status for remote customizations. */
 	readonly status?: 'loading' | 'loaded' | 'degraded' | 'error';
 	/** Human-readable status detail (e.g. error message or warning). */
@@ -156,6 +156,9 @@ export async function expandHookFileItems(
 							enabled: item.enabled,
 							groupKey: item.groupKey,
 							storage: item.storage,
+							extensionId: item.extensionId,
+							pluginUri: item.pluginUri,
+							userInvocable: item.userInvocable,
 						});
 					}
 				}
@@ -197,7 +200,7 @@ export class AICustomizationItemNormalizer {
 	}
 
 	normalizeItem(item: ICustomizationItem, promptType: PromptsType, uriUseCounts = new ResourceMap<number>()): IAICustomizationListItem {
-		const { storage, groupKey, isBuiltin, extensionLabel } = this.resolveSource(item);
+		const { storage, groupKey, isBuiltin, extensionId, pluginUri } = this.inferStorageAndGroup(item);
 		const seenCount = uriUseCounts.get(item.uri) ?? 0;
 		uriUseCounts.set(item.uri, seenCount + 1);
 		const duplicateSuffix = seenCount === 0 ? '' : `#${seenCount}`;
@@ -215,56 +218,49 @@ export class AICustomizationItemNormalizer {
 			promptType,
 			disabled: item.enabled === false,
 			groupKey,
-			pluginUri: storage === PromptsStorage.plugin ? this.findPluginUri(item.uri) : undefined,
+			pluginUri,
 			displayName: item.name,
 			badge: item.badge,
 			badgeTooltip: item.badgeTooltip,
 			typeIcon: promptType === PromptsType.instructions && storage ? storageToIcon(storage) : undefined,
 			isBuiltin,
-			extensionLabel,
+			extensionId,
 			status: item.status,
 			statusMessage: item.statusMessage,
 		};
 	}
 
-	private resolveSource(item: ICustomizationItem): { storage?: PromptsStorage; groupKey?: string; isBuiltin?: boolean; extensionLabel?: string } {
-		const inferred = this.inferStorageAndGroup(item.uri);
+	private inferStorageAndGroup(item: ICustomizationItem): { storage: PromptsStorage; groupKey?: string; isBuiltin?: boolean; extensionId?: string; pluginUri?: URI } {
+		const groupKey = item.groupKey;
+		const isBuiltin = groupKey === BUILTIN_STORAGE;
 
-		// Use provider-supplied values when available; otherwise fall back to URI inference.
-		const storage = item.storage ?? inferred.storage;
-		const extensionLabel = item.extensionLabel ?? inferred.extensionLabel;
-
-		if (!item.groupKey) {
-			return { ...inferred, storage, extensionLabel };
+		if (item.extensionId) {
+			const extensionIdentifier = new ExtensionIdentifier(item.extensionId);
+			if (isChatExtensionItem(extensionIdentifier, this.productService)) {
+				return { storage: PromptsStorage.extension, groupKey: BUILTIN_STORAGE, isBuiltin: true, extensionId: item.extensionId };
+			}
+			return { storage: PromptsStorage.extension, extensionId: item.extensionId, groupKey, isBuiltin };
+		}
+		if (item.pluginUri) {
+			return { storage: PromptsStorage.plugin, pluginUri: item.pluginUri, groupKey, isBuiltin };
 		}
 
-		switch (item.groupKey) {
-			case BUILTIN_STORAGE:
-				return { storage: PromptsStorage.extension, groupKey: BUILTIN_STORAGE, isBuiltin: true, extensionLabel };
-			default:
-				return { storage, groupKey: item.groupKey, extensionLabel };
-		}
-	}
-
-	private inferStorageAndGroup(uri: URI): { storage?: PromptsStorage; groupKey?: string; isBuiltin?: boolean; extensionLabel?: string } {
-		if (uri.scheme !== Schemas.file) {
-			return { storage: PromptsStorage.extension, groupKey: BUILTIN_STORAGE, isBuiltin: true };
-		}
+		const uri = item.uri;
 
 		const activeProjectRoot = this.workspaceService.getActiveProjectRoot();
 		if (activeProjectRoot && isEqualOrParent(uri, activeProjectRoot)) {
-			return { storage: PromptsStorage.local };
+			return { storage: PromptsStorage.local, groupKey, isBuiltin };
 		}
 
 		for (const folder of this.workspaceContextService.getWorkspace().folders) {
 			if (isEqualOrParent(uri, folder.uri)) {
-				return { storage: PromptsStorage.local };
+				return { storage: PromptsStorage.local, groupKey, isBuiltin };
 			}
 		}
 
 		for (const plugin of this.agentPluginService.plugins.get()) {
 			if (isEqualOrParent(uri, plugin.uri)) {
-				return { storage: PromptsStorage.plugin };
+				return { storage: PromptsStorage.plugin, pluginUri: plugin.uri, groupKey, isBuiltin };
 			}
 		}
 
@@ -272,22 +268,13 @@ export class AICustomizationItemNormalizer {
 		if (extensionId) {
 			const extensionIdentifier = new ExtensionIdentifier(extensionId);
 			if (isChatExtensionItem(extensionIdentifier, this.productService)) {
-				return { storage: PromptsStorage.extension, groupKey: BUILTIN_STORAGE, isBuiltin: true };
+				return { storage: PromptsStorage.extension, groupKey: BUILTIN_STORAGE, isBuiltin: true, extensionId };
 			}
-			return { storage: PromptsStorage.extension, extensionLabel: extensionIdentifier.value };
+			return { storage: PromptsStorage.extension, extensionId, groupKey, isBuiltin };
 		}
-
 		return { storage: PromptsStorage.user };
 	}
 
-	private findPluginUri(itemUri: URI): URI | undefined {
-		for (const plugin of this.agentPluginService.plugins.get()) {
-			if (isEqualOrParent(itemUri, plugin.uri)) {
-				return plugin.uri;
-			}
-		}
-		return undefined;
-	}
 }
 
 // #endregion
@@ -364,7 +351,91 @@ export class ProviderCustomizationItemSource implements IAICustomizationItemSour
 			providerItems = await this.addSkillDescriptionFallbacks(providerItems);
 		}
 
-		return this.itemNormalizer.normalizeItems(providerItems, promptType);
+		const normalized = this.itemNormalizer.normalizeItems(providerItems, promptType);
+		if (promptType === PromptsType.skill) {
+			return this.mergeBuiltinSkills(normalized, promptType);
+		}
+		return normalized;
+	}
+
+	/**
+	 * Merges built-in skills (bundled with the app under `vs/sessions/skills/`)
+	 * into the provider's items. The provider may re-discover the bundled
+	 * copies when scanning disk — those duplicates are dropped (deduped by
+	 * URI) and replaced with the authoritative built-in entry tagged
+	 * `groupKey: BUILTIN_STORAGE` so the UI renders them in the "Built-in"
+	 * group. User-authored overrides (different URI, same name) are preserved.
+	 *
+	 * A workbench that uses the base `PromptsService` will throw on
+	 * `BUILTIN_STORAGE` — we catch and return the items unchanged in that case.
+	 */
+	private async mergeBuiltinSkills(items: readonly IAICustomizationListItem[], promptType: PromptsType): Promise<IAICustomizationListItem[]> {
+		let builtinPaths: readonly { uri: URI; name?: string; description?: string }[] = [];
+		try {
+			builtinPaths = await this.promptsService.listPromptFilesForStorage(PromptsType.skill, BUILTIN_STORAGE as unknown as PromptsStorage, CancellationToken.None);
+		} catch {
+			return [...items];
+		}
+		if (builtinPaths.length === 0) {
+			return [...items];
+		}
+
+		const builtinUris = new ResourceMap<typeof builtinPaths[number]>();
+		for (const p of builtinPaths) {
+			builtinUris.set(p.uri, p);
+		}
+
+		// Drop provider items that are the same URI as a built-in (the provider
+		// re-discovered the bundled copy by scanning disk).
+		const deduped = items.filter(item => !builtinUris.has(item.uri));
+
+		const uiIntegrations = this.workspaceService.getSkillUIIntegrations();
+		const uiIntegrationBadge = localize('uiIntegrationBadge', "UI Integration");
+
+		// Collect names of user/workspace skills so we can hide the built-in
+		// copy once the user has added an override at either level.
+		const overriddenNames = new Set<string>();
+		for (const item of deduped) {
+			if (item.storage === PromptsStorage.local || item.storage === PromptsStorage.user) {
+				if (item.name) {
+					overriddenNames.add(item.name);
+				}
+			}
+		}
+
+		// Append authoritative built-in entries (excluding any that have been
+		// overridden by a workspace or user copy with the same name).
+		const uriUseCounts = new ResourceMap<number>();
+		for (const item of deduped) {
+			uriUseCounts.set(item.uri, (uriUseCounts.get(item.uri) ?? 0) + 1);
+		}
+		const appended: IAICustomizationListItem[] = [];
+		const disabledPromptFiles = this.promptsService.getDisabledPromptFiles(PromptsType.skill);
+		for (const p of builtinPaths) {
+			const name = p.name ?? basename(p.uri);
+			if (overriddenNames.has(name)) {
+				continue;
+			}
+			const folderName = basename(dirname(p.uri));
+			const uiTooltip = uiIntegrations.get(folderName);
+			const builtinItem: ICustomizationItem = {
+				uri: p.uri,
+				type: PromptsType.skill,
+				name,
+				description: p.description,
+				storage: BUILTIN_STORAGE as unknown as PromptsStorage,
+				groupKey: BUILTIN_STORAGE,
+				enabled: !disabledPromptFiles.has(p.uri),
+				badge: uiTooltip ? uiIntegrationBadge : undefined,
+				badgeTooltip: uiTooltip,
+				extensionId: undefined,
+				pluginUri: undefined,
+				userInvocable: true,
+			};
+			appended.push(this.itemNormalizer.normalizeItem(builtinItem, promptType, uriUseCounts));
+		}
+
+		return [...deduped, ...appended];
 	}
 
 	private async addSkillDescriptionFallbacks(items: readonly ICustomizationItem[]): Promise<readonly ICustomizationItem[]> {
@@ -395,6 +466,9 @@ export class ProviderCustomizationItemSource implements IAICustomizationItemSour
 				name: getFriendlyName(basename(file.uri)),
 				groupKey: 'sync-local',
 				enabled: true,
+				extensionId: file.extension?.id,
+				pluginUri: file.pluginUri,
+				userInvocable: undefined
 			}));
 
 		return this.itemNormalizer.normalizeItems(providerItems, promptType)
@@ -402,7 +476,7 @@ export class ProviderCustomizationItemSource implements IAICustomizationItemSour
 				...item,
 				id: `sync-${item.id}`,
 				syncable: true,
-				synced: syncProvider.isSelected(item.uri),
+				synced: !syncProvider.isDisabled(item.uri),
 			}));
 	}
 }

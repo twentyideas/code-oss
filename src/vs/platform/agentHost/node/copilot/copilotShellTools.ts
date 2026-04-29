@@ -11,7 +11,7 @@ import * as platform from '../../../../base/common/platform.js';
 import { DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILogService } from '../../../log/common/log.js';
-import { TerminalClaimKind, type ITerminalSessionClaim } from '../../common/state/protocol/state.js';
+import { TerminalClaimKind, type TerminalSessionClaim } from '../../common/state/protocol/state.js';
 import { IAgentHostTerminalManager } from '../agentHostTerminalManager.js';
 
 /**
@@ -39,7 +39,7 @@ interface IManagedShell {
 	readonly shellType: ShellType;
 }
 
-type ShellType = 'bash' | 'powershell';
+export type ShellType = 'bash' | 'powershell';
 
 function getShellExecutable(shellType: ShellType): string {
 	if (shellType === 'powershell') {
@@ -70,6 +70,7 @@ export class ShellManager {
 
 	constructor(
 		private readonly _sessionUri: URI,
+		private readonly _workingDirectory: URI | undefined,
 		@IAgentHostTerminalManager private readonly _terminalManager: IAgentHostTerminalManager,
 		@ILogService private readonly _logService: ILogService,
 	) { }
@@ -94,7 +95,7 @@ export class ShellManager {
 		const id = generateUuid();
 		const terminalUri = `agenthost-terminal://shell/${id}`;
 
-		const claim: ITerminalSessionClaim = {
+		const claim: TerminalSessionClaim = {
 			kind: TerminalClaimKind.Session,
 			session: this._sessionUri.toString(),
 			turnId,
@@ -107,8 +108,8 @@ export class ShellManager {
 			terminal: terminalUri,
 			claim,
 			name: shellDisplayName,
-			cwd,
-		}, { shell: getShellExecutable(shellType) });
+			cwd: cwd ?? this._workingDirectory?.fsPath,
+		}, { shell: getShellExecutable(shellType), preventShellHistory: true, nonInteractive: true });
 
 		const shell: IManagedShell = { id, terminalUri, shellType };
 		this._shells.set(id, shell);
@@ -185,6 +186,20 @@ function buildSentinelCommand(sentinelId: string, shellType: ShellType): string 
 	return `echo "${SENTINEL_PREFIX}${sentinelId}_EXIT_$?>>>"`;
 }
 
+/**
+ * For POSIX shells (bash/zsh) that honor `HISTCONTROL=ignorespace` /
+ * `HIST_IGNORE_SPACE`, prepending a single space prevents the command from
+ * being recorded in shell history. The shell integration scripts opt these
+ * settings in via the `VSCODE_PREVENT_SHELL_HISTORY` env var (set when the
+ * terminal is created with `preventShellHistory: true`). PowerShell
+ * suppresses history through PSReadLine instead, so no prefix is needed.
+ *
+ * Exported for tests.
+ */
+export function prefixForHistorySuppression(shellType: ShellType): string {
+	return shellType === 'powershell' ? '' : ' ';
+}
+
 function parseSentinel(content: string, sentinelId: string): { found: boolean; exitCode: number; outputBeforeSentinel: string } {
 	const marker = `${SENTINEL_PREFIX}${sentinelId}_EXIT_`;
 	const idx = content.indexOf(marker);
@@ -231,10 +246,13 @@ async function executeCommandInShell(
 	terminalManager: IAgentHostTerminalManager,
 	logService: ILogService,
 ): Promise<ToolResultObject> {
-	if (terminalManager.supportsCommandDetection(shell.terminalUri)) {
-		return executeCommandWithShellIntegration(shell, command, timeoutMs, terminalManager, logService);
-	}
-	return executeCommandWithSentinel(shell, command, timeoutMs, terminalManager, logService);
+	const result = terminalManager.supportsCommandDetection(shell.terminalUri)
+		? await executeCommandWithShellIntegration(shell, command, timeoutMs, terminalManager, logService)
+		: await executeCommandWithSentinel(shell, command, timeoutMs, terminalManager, logService);
+	return {
+		...result,
+		textResultForLlm: `Shell ID: ${shell.id}\n${result.textResultForLlm}`,
+	};
 }
 
 /**
@@ -251,7 +269,7 @@ async function executeCommandWithShellIntegration(
 ): Promise<ToolResultObject> {
 	const disposables = new DisposableStore();
 
-	terminalManager.writeInput(shell.terminalUri, `${command}\r`);
+	terminalManager.writeInput(shell.terminalUri, `${prefixForHistorySuppression(shell.shellType)}${command}\r`);
 
 	return new Promise<ToolResultObject>(resolve => {
 		let resolved = false;
@@ -321,7 +339,7 @@ async function executeCommandWithSentinel(
 	const offsetBefore = contentBefore.length;
 
 	// PTY input uses \r for line endings — the PTY translates to \r\n
-	const input = `${command}\r${sentinelCmd}\r`;
+	const input = `${prefixForHistorySuppression(shell.shellType)}${command}\r${sentinelCmd}\r`;
 	terminalManager.writeInput(shell.terminalUri, input);
 
 	return new Promise<ToolResultObject>(resolve => {
@@ -427,7 +445,7 @@ export function createShellTools(
 
 	const primaryTool: Tool<IShellToolArgs> = {
 		name: shellType,
-		description: `Execute a command in a persistent ${shellType} shell. The shell is reused across calls.`,
+		description: shellType === 'bash' ? createBashModelDescription(false) : createPowerShellModelDescription(shellType, 'pwsh.exe', false),
 		parameters: {
 			type: 'object',
 			properties: {
@@ -458,6 +476,7 @@ export function createShellTools(
 			},
 		},
 		overridesBuiltInTool: true,
+		skipPermission: true,
 		handler: (args) => {
 			const shells = shellManager.listShells();
 			const shell = args.shell_id
@@ -485,6 +504,7 @@ export function createShellTools(
 			required: ['command'],
 		},
 		overridesBuiltInTool: true,
+		skipPermission: true,
 		handler: (args) => {
 			const shells = shellManager.listShells();
 			const shell = shells[shells.length - 1];
@@ -506,6 +526,7 @@ export function createShellTools(
 			},
 		},
 		overridesBuiltInTool: true,
+		skipPermission: true,
 		handler: (args) => {
 			if (args.shell_id) {
 				const success = shellManager.shutdownShell(args.shell_id);
@@ -528,6 +549,7 @@ export function createShellTools(
 		description: `List active ${shellType} shell instances.`,
 		parameters: { type: 'object', properties: {} },
 		overridesBuiltInTool: true,
+		skipPermission: true,
 		handler: () => {
 			const shells = shellManager.listShells();
 			if (shells.length === 0) {
@@ -543,4 +565,164 @@ export function createShellTools(
 	};
 
 	return [primaryTool, readTool, writeTool, shutdownTool, listTool];
+}
+interface ITerminalSandboxResolvedNetworkDomains {
+	allowedDomains: string[];
+	deniedDomains: string[];
+}
+
+function isWindowsPowerShell(envShell: string): boolean {
+	return envShell.endsWith('System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+}
+
+function createPowerShellModelDescription(shellType: string, shellPath: string, isSandboxEnabled: boolean, networkDomains?: ITerminalSandboxResolvedNetworkDomains): string {
+	const isWinPwsh = isWindowsPowerShell(shellPath);
+	const parts = [
+		`This tool allows you to execute ${isWinPwsh ? 'Windows PowerShell 5.1' : 'PowerShell'} commands in a persistent terminal session, preserving environment variables, working directory, and other context across multiple commands.`,
+		'',
+		'Command Execution:',
+		// IMPORTANT: PowerShell 5 does not support `&&` so always re-write them to `;`. Note that
+		// the behavior of `&&` differs a little from `;` but in general it's fine
+		isWinPwsh ? '- Use semicolons ; to chain commands on one line, NEVER use && even when asked explicitly' : '- Prefer ; when chaining commands on one line',
+		'- Prefer pipelines | for object-based data flow',
+		'- Never create a sub-shell (eg. powershell -c "command") unless explicitly asked',
+		'',
+		'Directory Management:',
+		'- Prefer relative paths when navigating directories, only use absolute when the path is far away or the current cwd is not expected',
+		'- By default (mode=sync), shell and cwd are reused by subsequent sync commands',
+		'- Use $PWD or Get-Location for current directory',
+		'- Use Push-Location/Pop-Location for directory stack',
+		'',
+		'Program Execution:',
+		'- Supports .NET, Python, Node.js, and other executables',
+		'- Install modules via Install-Module, Install-Package',
+		'- Use Get-Command to verify cmdlet/function availability',
+		'',
+		'Async Mode:',
+		'- For long-running tasks (e.g., servers), use mode=async',
+		'- Returns a terminal ID for checking status and runtime later',
+		'- Use Start-Job for background PowerShell jobs',
+		'',
+		`Use write_${shellType} to send commands or input to a terminal session.`,
+	];
+
+	if (isSandboxEnabled) {
+		parts.push(...createSandboxLines(networkDomains));
+	}
+
+	parts.push(
+		'',
+		'Output Management:',
+		'- Output is automatically truncated if longer than 60KB to prevent context overflow',
+		'- Use Select-Object, Where-Object, Format-Table to filter output',
+		'- Use -First/-Last parameters to limit results',
+		'- For pager commands, add | Out-String or | Format-List',
+		'',
+		'Best Practices:',
+		'- Use proper cmdlet names instead of aliases in scripts',
+		'- Quote paths with spaces: "C:\\Path With Spaces"',
+		'- Prefer PowerShell cmdlets over external commands when available',
+		'- Prefer idiomatic PowerShell like Get-ChildItem instead of dir or ls for file listings',
+		'- Use Test-Path to check file/directory existence',
+		'- Be specific with Select-Object properties to avoid excessive output',
+		'- Avoid printing credentials unless absolutely required',
+		'',
+		'Interactive Input Handling:',
+		'- When a terminal command is waiting for interactive input, do NOT suggest alternatives or ask the user whether to proceed. Instead, use the ask_user tool to collect the needed values from the user, then send them.',
+		`- Send exactly one answer per prompt using write_${shellType}. Never send multiple answers in a single send.`,
+		`- After each send, call read_${shellType} to read the next prompt before sending the next answer.`,
+		'- Continue one prompt at a time until the command finishes.',
+	);
+
+	return parts.join('\n');
+}
+
+function createSandboxLines(networkDomains?: ITerminalSandboxResolvedNetworkDomains): string[] {
+	const lines = [
+		'',
+		'Sandboxing:',
+		'- ATTENTION: Terminal sandboxing is enabled, commands run in a sandbox by default',
+		'- When executing commands within the sandboxed environment, all operations requiring a temporary directory must utilize the $TMPDIR environment variable. The /tmp directory is not guaranteed to be accessible or writable and must be avoided',
+		'- Tools and scripts should respect the TMPDIR environment variable, which is automatically set to an appropriate path within the sandbox',
+		'- When a command fails due to sandbox restrictions, immediately re-run it with requestUnsandboxedExecution=true. Do NOT ask the user for permission — setting this flag automatically shows a confirmation prompt to the user',
+		'- Only set requestUnsandboxedExecution=true when there is evidence of failures caused by the sandbox, e.g. \'Operation not permitted\' errors, network failures, or file access errors, etc',
+		'- Do NOT set requestUnsandboxedExecution=true without first executing the command in sandbox mode. Always try the command in the sandbox first, and only set requestUnsandboxedExecution=true when retrying after that sandboxed execution failed due to sandbox restrictions.',
+		'- When setting requestUnsandboxedExecution=true, also provide requestUnsandboxedExecutionReason explaining why the command needs unsandboxed access',
+	];
+	if (networkDomains) {
+		const deniedSet = new Set(networkDomains.deniedDomains);
+		const effectiveAllowed = networkDomains.allowedDomains.filter(d => !deniedSet.has(d));
+		if (effectiveAllowed.length === 0) {
+			lines.push('- All network access is blocked in the sandbox');
+		} else {
+			lines.push(`- Only the following domains are accessible in the sandbox (all other network access is blocked): ${effectiveAllowed.join(', ')}`);
+		}
+		if (networkDomains.deniedDomains.length > 0) {
+			lines.push(`- The following domains are explicitly blocked in the sandbox: ${networkDomains.deniedDomains.join(', ')}`);
+		}
+	}
+	return lines;
+}
+
+function createGenericDescription(shellType: string, isSandboxEnabled: boolean, networkDomains?: ITerminalSandboxResolvedNetworkDomains): string {
+	const parts = [`
+Command Execution:
+- Use && to chain simple commands on one line
+- Prefer pipelines | over temporary files for data flow
+- Never create a sub-shell (eg. bash -c "command") unless explicitly asked
+
+Directory Management:
+- Prefer relative paths when navigating directories, only use absolute when the path is far away or the current cwd is not expected
+- By default (mode=sync), shell and cwd are reused by subsequent sync commands
+- Use $PWD for current directory references
+- Consider using pushd/popd for directory stack management
+- Supports directory shortcuts like ~ and -
+
+Program Execution:
+- Supports Python, Node.js, and other executables
+- Install packages via package managers (brew, apt, etc.)
+- Use which or command -v to verify command availability
+
+Async Mode:
+- For long-running tasks (e.g., servers), use mode=async
+- Returns a terminal ID for checking status and runtime later
+
+Use write_${shellType} to send commands or input to a terminal session.`];
+
+	if (isSandboxEnabled) {
+		parts.push(createSandboxLines(networkDomains).join('\n'));
+	}
+
+	parts.push(`
+
+Output Management:
+- Output is automatically truncated if longer than 60KB to prevent context overflow
+- Use head, tail, grep, awk to filter and limit output size
+- For pager commands, disable paging: git --no-pager or add | cat
+- Use wc -l to count lines before displaying large outputs
+
+Best Practices:
+- Quote variables: "$var" instead of $var to handle spaces
+- Use find with -exec or xargs for file operations
+- Be specific with commands to avoid excessive output
+- Avoid printing credentials unless absolutely required
+- NEVER run sleep or similar wait commands in a terminal. You will be automatically notified on your next turn when async terminal commands or timed-out sync commands complete or need input. Use read_${shellType} to check output before then
+
+Interactive Input Handling:
+- When a terminal command is waiting for interactive input, do NOT suggest alternatives or ask the user whether to proceed. Instead, use the ask_user tool to collect the needed values from the user, then send them.
+- Send exactly one answer per prompt using write_${shellType}. Never send multiple answers in a single send.
+- After each send, call read_${shellType} to read the next prompt before sending the next answer.
+- Continue one prompt at a time until the command finishes.`);
+
+	return parts.join('');
+}
+
+function createBashModelDescription(isSandboxEnabled: boolean, networkDomains?: ITerminalSandboxResolvedNetworkDomains): string {
+	return [
+		'This tool allows you to execute shell commands in a persistent bash terminal session, preserving environment variables, working directory, and other context across multiple commands.',
+		createGenericDescription('bash', isSandboxEnabled, networkDomains),
+		'- Use [[ ]] for conditional tests instead of [ ]',
+		'- Prefer $() over backticks for command substitution',
+		'- Use set -e at start of complex commands to exit on errors'
+	].join('\n');
 }
