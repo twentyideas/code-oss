@@ -168,6 +168,9 @@ import './contrib/issue/browser/issue.contribution.js';
 // Splash
 import './contrib/splash/browser/splash.contribution.js';
 
+// Render Suspension (postMessage-driven GPU throttling for embedded iframes)
+import './contrib/renderSuspension/browser/renderSuspension.contribution.js';
+
 // Remote Start Entry for the Web
 import './contrib/remote/browser/remoteStartEntry.contribution.js';
 
