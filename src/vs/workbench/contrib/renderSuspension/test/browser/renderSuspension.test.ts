@@ -5,11 +5,11 @@
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import { RenderSuspensionContribution } from '../../browser/renderSuspension.js';
+import { RenderSuspensionService } from '../../browser/renderSuspensionService.js';
 import { NullLogService } from '../../../../../platform/log/common/log.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 
-suite('RenderSuspensionContribution', () => {
+suite('RenderSuspensionService', () => {
 
 	const disposables = new DisposableStore();
 	let originalRAF: typeof requestAnimationFrame;
@@ -28,129 +28,96 @@ suite('RenderSuspensionContribution', () => {
 
 	ensureNoDisposablesAreLeakedInTestSuite();
 
-	function createContribution(): RenderSuspensionContribution {
-		const contribution = new RenderSuspensionContribution(new NullLogService());
-		disposables.add(contribution);
-		return contribution;
+	function createService(): RenderSuspensionService {
+		const service = new RenderSuspensionService(new NullLogService());
+		disposables.add(service);
+		return service;
 	}
 
-	test('suspend replaces requestAnimationFrame with a no-op', () => {
-		createContribution();
+	test('initial state is not suspended', () => {
+		const service = createService();
+		assert.strictEqual(service.isSuspended, false);
+	});
 
-		window.postMessage({ type: 'devswarm:suspend-rendering' }, '*');
+	test('suspend replaces requestAnimationFrame', () => {
+		const service = createService();
+		service.suspend();
 
-		// postMessage is async — need to wait for it
-		return new Promise<void>((resolve) => {
-			originalRAF.call(window, () => {
-				assert.notStrictEqual(window.requestAnimationFrame, originalRAF);
+		assert.strictEqual(service.isSuspended, true);
+		assert.notStrictEqual(window.requestAnimationFrame, originalRAF);
 
-				// Calling rAF while suspended should return -1 and not invoke the callback synchronously
-				let called = false;
-				const id = window.requestAnimationFrame(() => { called = true; });
-				assert.strictEqual(id, -1);
-				assert.strictEqual(called, false);
-
-				resolve();
-			});
-		});
+		let called = false;
+		const id = window.requestAnimationFrame(() => { called = true; });
+		assert.strictEqual(id, -1);
+		assert.strictEqual(called, false);
 	});
 
 	test('resume restores requestAnimationFrame', () => {
-		createContribution();
+		const service = createService();
+		service.suspend();
+		service.resume();
 
-		window.postMessage({ type: 'devswarm:suspend-rendering' }, '*');
-
-		return new Promise<void>((resolve) => {
-			originalRAF.call(window, () => {
-				window.postMessage({ type: 'devswarm:resume-rendering' }, '*');
-
-				originalRAF.call(window, () => {
-					assert.strictEqual(window.requestAnimationFrame, originalRAF);
-					resolve();
-				});
-			});
-		});
+		assert.strictEqual(service.isSuspended, false);
+		assert.strictEqual(window.requestAnimationFrame, originalRAF);
 	});
 
 	test('resume flushes queued callbacks', () => {
-		createContribution();
+		const service = createService();
+		service.suspend();
 
-		window.postMessage({ type: 'devswarm:suspend-rendering' }, '*');
+		const calls: number[] = [];
+		window.requestAnimationFrame(() => calls.push(1));
+		window.requestAnimationFrame(() => calls.push(2));
+		assert.deepStrictEqual(calls, []);
+
+		service.resume();
 
 		return new Promise<void>((resolve) => {
+			// Queued callbacks fire on the next real animation frame
 			originalRAF.call(window, () => {
-				// Queue some callbacks while suspended
-				const calls: number[] = [];
-				window.requestAnimationFrame(() => calls.push(1));
-				window.requestAnimationFrame(() => calls.push(2));
-				assert.deepStrictEqual(calls, []);
-
-				window.postMessage({ type: 'devswarm:resume-rendering' }, '*');
-
 				originalRAF.call(window, () => {
-					// After resume, a real rAF fires the queued callbacks
-					originalRAF.call(window, () => {
-						assert.deepStrictEqual(calls, [1, 2]);
-						resolve();
-					});
+					assert.deepStrictEqual(calls, [1, 2]);
+					resolve();
 				});
-			});
-		});
-	});
-
-	test('ignores unrelated messages', () => {
-		createContribution();
-
-		window.postMessage({ type: 'some-other-message' }, '*');
-		window.postMessage('a string', '*');
-		window.postMessage(42, '*');
-
-		return new Promise<void>((resolve) => {
-			originalRAF.call(window, () => {
-				assert.strictEqual(window.requestAnimationFrame, originalRAF);
-				resolve();
 			});
 		});
 	});
 
 	test('double suspend is idempotent', () => {
-		createContribution();
+		const service = createService();
+		service.suspend();
+		const rafAfterFirst = window.requestAnimationFrame;
 
-		window.postMessage({ type: 'devswarm:suspend-rendering' }, '*');
-
-		return new Promise<void>((resolve) => {
-			originalRAF.call(window, () => {
-				const rafAfterFirstSuspend = window.requestAnimationFrame;
-
-				window.postMessage({ type: 'devswarm:suspend-rendering' }, '*');
-
-				originalRAF.call(window, () => {
-					// Should be the same patched function, not double-wrapped
-					assert.strictEqual(window.requestAnimationFrame, rafAfterFirstSuspend);
-					resolve();
-				});
-			});
-		});
+		service.suspend();
+		assert.strictEqual(window.requestAnimationFrame, rafAfterFirst);
 	});
 
 	test('double resume is a no-op', () => {
-		createContribution();
+		const service = createService();
+		service.suspend();
+		service.resume();
+		service.resume();
 
-		window.postMessage({ type: 'devswarm:suspend-rendering' }, '*');
+		assert.strictEqual(service.isSuspended, false);
+		assert.strictEqual(window.requestAnimationFrame, originalRAF);
+	});
 
-		return new Promise<void>((resolve) => {
-			originalRAF.call(window, () => {
-				window.postMessage({ type: 'devswarm:resume-rendering' }, '*');
+	test('fires onDidChangeSuspended on suspend and resume', () => {
+		const service = createService();
+		const events: boolean[] = [];
+		disposables.add(service.onDidChangeSuspended(v => events.push(v)));
 
-				originalRAF.call(window, () => {
-					window.postMessage({ type: 'devswarm:resume-rendering' }, '*');
+		service.suspend();
+		service.resume();
 
-					originalRAF.call(window, () => {
-						assert.strictEqual(window.requestAnimationFrame, originalRAF);
-						resolve();
-					});
-				});
-			});
-		});
+		assert.deepStrictEqual(events, [true, false]);
+	});
+
+	test('resume without prior suspend is a no-op', () => {
+		const service = createService();
+		service.resume();
+
+		assert.strictEqual(service.isSuspended, false);
+		assert.strictEqual(window.requestAnimationFrame, originalRAF);
 	});
 });
