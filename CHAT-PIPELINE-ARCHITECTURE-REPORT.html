@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat UI Pipeline Architecture Report</title>
+<style>
+  :root {
+    --bg: #1e1e1e;
+    --bg-card: #252526;
+    --bg-code: #1a1a1a;
+    --border: #333;
+    --text: #d4d4d4;
+    --text-muted: #888;
+    --accent: #569cd6;
+    --accent2: #4ec9b0;
+    --accent3: #ce9178;
+    --accent4: #dcdcaa;
+    --heading: #e0e0e0;
+    --link: #569cd6;
+    --green: #6a9955;
+    --red: #f44747;
+    --yellow: #dcdcaa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+  h1 { color: var(--heading); font-size: 2em; margin-bottom: 8px; }
+  h2 { color: var(--accent); font-size: 1.5em; margin: 48px 0 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { color: var(--accent2); font-size: 1.2em; margin: 32px 0 12px; }
+  h4 { color: var(--accent3); font-size: 1.05em; margin: 24px 0 8px; }
+  p { margin: 12px 0; }
+  .subtitle { color: var(--text-muted); font-size: 1.1em; margin-bottom: 32px; }
+  .date { color: var(--text-muted); font-size: 0.9em; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--bg-code);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9em;
+    color: var(--accent3);
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 16px 0;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.85em;
+    line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; color: var(--text); }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 16px 0;
+  }
+  .card-accent { border-left: 3px solid var(--accent); }
+  .card-green { border-left: 3px solid var(--green); }
+  .card-yellow { border-left: 3px solid var(--yellow); }
+  .card-red { border-left: 3px solid var(--red); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.9em;
+  }
+  th {
+    background: var(--bg-code);
+    color: var(--accent2);
+    text-align: left;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+  }
+  td {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+  }
+  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+  ul, ol { margin: 12px 0 12px 24px; }
+  li { margin: 6px 0; }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .tag-free { background: #2d4a2d; color: #6a9955; }
+  .tag-build { background: #4a3d2d; color: #dcdcaa; }
+  .tag-custom { background: #2d3a4a; color: #569cd6; }
+  .diagram {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    margin: 16px 0;
+    overflow-x: auto;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.82em;
+    line-height: 1.5;
+    white-space: pre;
+  }
+  .toc { list-style: none; margin-left: 0; }
+  .toc li { margin: 4px 0; }
+  .toc li::before { content: ''; }
+  .toc a { color: var(--text); }
+  .toc a:hover { color: var(--accent); }
+  .section-num { color: var(--accent); font-weight: 600; margin-right: 8px; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .verdict { font-size: 1.1em; font-weight: 600; }
+  .verdict-yes { color: var(--green); }
+  .verdict-partial { color: var(--yellow); }
+  .verdict-no { color: var(--red); }
+</style>
+</head>
+<body>
+
+<h1>Chat UI Pipeline Architecture Report</h1>
+<p class="subtitle">VS Code Chat UI Investigation &mdash; Repurposing the Copilot Chat Panel for Custom CLI-Based AI Assistants</p>
+<p class="date">May 2026 &middot; Branch: <code>feature/chat-ui-pipeline-investigation</code> &rarr; <code>release/2.4.0</code></p>
+
+<hr>
+
+<h2>Table of Contents</h2>
+<ol class="toc">
+  <li><a href="#s1"><span class="section-num">1</span> Executive Summary</a></li>
+  <li><a href="#s2"><span class="section-num">2</span> Architecture Overview</a></li>
+  <li><a href="#s3"><span class="section-num">3</span> UI Components &amp; Rendering Pipeline</a></li>
+  <li><a href="#s4"><span class="section-num">4</span> Data Entry Point &amp; Request Lifecycle</a></li>
+  <li><a href="#s5"><span class="section-num">5</span> Chat Participant Registration</a></li>
+  <li><a href="#s6"><span class="section-num">6</span> Response Streaming</a></li>
+  <li><a href="#s7"><span class="section-num">7</span> The ChatResponseStream API &mdash; What You Get for Free</a></li>
+  <li><a href="#s8"><span class="section-num">8</span> Tools, MCP Servers &amp; Skills</a></li>
+  <li><a href="#s9"><span class="section-num">9</span> Input Area &amp; Completions System</a></li>
+  <li><a href="#s10"><span class="section-num">10</span> Toolbar Actions &amp; Picker Replacement</a></li>
+  <li><a href="#s11"><span class="section-num">11</span> Visual Polish &mdash; Animations, Theming, Colors</a></li>
+  <li><a href="#s12"><span class="section-num">12</span> Virtualization &amp; Performance</a></li>
+  <li><a href="#s13"><span class="section-num">13</span> Reusing Components Outside the Chat Panel</a></li>
+  <li><a href="#s14"><span class="section-num">14</span> Shared Lib Feasibility (Nx Monorepo / Web App)</a></li>
+  <li><a href="#s15"><span class="section-num">15</span> Multi-Window Routing (Remote Web Server)</a></li>
+  <li><a href="#s16"><span class="section-num">16</span> Recommended Architecture</a></li>
+  <li><a href="#s17"><span class="section-num">17</span> Key File Index</a></li>
+</ol>
+
+<hr>
+
+<h2 id="s1">1. Executive Summary</h2>
+
+<div class="card card-green">
+  <p class="verdict verdict-yes">Verdict: The VS Code Chat UI can be fully repurposed for custom CLI-based AI assistants with zero core rendering changes.</p>
+  <p>The swap point is <code>IChatAgentImplementation.invoke()</code>. Everything above it (UI, orchestration, tools, streaming) is reusable as-is. Everything below it (the LLM backend call) is what we replace with our CLI assistant pipeline.</p>
+</div>
+
+<p>Our architecture: embed code-oss (served as a web app, one instance per worktree), build a VS Code extension that registers a chat participant, and pipe data from CLI coding assistants (Claude Code, Copilot CLI, Codex, etc.) through the <code>ChatResponseStream</code> API. The existing UI renders everything automatically.</p>
+
+<h2 id="s2">2. Architecture Overview</h2>
+
+<div class="diagram">
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; Chat UI Layer &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474;                                                                      &#9474;
+&#9474;  ChatViewPane (sidebar)  &lt;or&gt;  ChatEditor (tab)  &lt;or&gt;  ChatQuick    &#9474;
+&#9474;       &#9492;&#9472;&#9472;&#9472; ChatWidget &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;            &#9474;
+&#9474;              &#9500;&#9472;&#9472; ChatInputPart (Monaco editor + attachments)          &#9474;
+&#9474;              &#9500;&#9472;&#9472; ChatListWidget (virtualized message list)             &#9474;
+&#9474;              &#9474;    &#9492;&#9472;&#9472; ChatListItemRenderer                           &#9474;
+&#9474;              &#9474;         &#9492;&#9472;&#9472; ChatContentParts (47+ part types)          &#9474;
+&#9474;              &#9492;&#9472;&#9472; ChatSuggestNextWidget                               &#9474;
+&#9474;                                                                      &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+                               &#9474; chatService.sendRequest()
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472; Service Layer &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474;                                                                      &#9474;
+&#9474;  IChatService (chatServiceImpl.ts)                                   &#9474;
+&#9474;    &#9500;&#9472;&#9472; parseChatRequest() &rarr; detect @agent, /command                  &#9474;
+&#9474;    &#9500;&#9472;&#9472; model.addRequest() &rarr; show in UI immediately                  &#9474;
+&#9474;    &#9500;&#9472;&#9472; collect hooks + instructions (async, parallel)                &#9474;
+&#9474;    &#9500;&#9472;&#9472; build IChatAgentRequest                                       &#9474;
+&#9474;    &#9492;&#9472;&#9472; chatAgentService.invokeAgent() &#9668; THE SWAP POINT               &#9474;
+&#9474;                                                                      &#9474;
+&#9474;  IChatAgentService (chatAgents.ts)                                   &#9474;
+&#9474;    &#9500;&#9472;&#9472; registerAgent() / registerDynamicAgent()                       &#9474;
+&#9474;    &#9500;&#9472;&#9472; invokeAgent() &rarr; agent.impl.invoke(req, progress, ...)        &#9474;
+&#9474;    &#9492;&#9472;&#9472; getDefaultAgent(location, mode)                               &#9474;
+&#9474;                                                                      &#9474;
+&#9474;  ChatModel (chatModel.ts)                                            &#9474;
+&#9474;    &#9500;&#9472;&#9472; addRequest() &rarr; fires onDidChange                              &#9474;
+&#9474;    &#9500;&#9472;&#9472; acceptResponseProgress() &rarr; updates response, fires events    &#9474;
+&#9474;    &#9492;&#9472;&#9472; setResponse() &rarr; marks complete                               &#9474;
+&#9474;                                                                      &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+                               &#9474; RPC ($handleProgressChunk)
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472; Extension Host &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474;                                                                      &#9474;
+&#9474;  ExtHostChatAgents2 (extHostChatAgents2.ts)                          &#9474;
+&#9474;    &#9492;&#9472;&#9472; ChatAgentResponseStream                                      &#9474;
+&#9474;         &#9500;&#9472;&#9472; markdown(), progress(), reference(), etc.                &#9474;
+&#9474;         &#9492;&#9472;&#9472; microtask queue &rarr; $handleProgressChunk RPC                &#9474;
+&#9474;                                                                      &#9474;
+&#9474;  OUR EXTENSION (the translation layer)                               &#9474;
+&#9474;    &#9500;&#9472;&#9472; Receives IChatAgentRequest                                    &#9474;
+&#9474;    &#9500;&#9472;&#9472; Spawns / connects to CLI assistant (Claude Code, Codex, etc.) &#9474;
+&#9474;    &#9500;&#9472;&#9472; Parses CLI stdout                                            &#9474;
+&#9474;    &#9492;&#9472;&#9472; Maps output &rarr; response.markdown() / .textEdit() / etc.      &#9474;
+&#9474;                                                                      &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</div>
+
+<h2 id="s3">3. UI Components &amp; Rendering Pipeline</h2>
+
+<h3>3.1 Main Chat Widget</h3>
+<div class="card">
+  <p><strong>File:</strong> <code>src/vs/workbench/contrib/chat/browser/widget/chatWidget.ts:209</code></p>
+  <p><code>ChatWidget extends Disposable implements IChatWidget</code> &mdash; the core widget composing input, message list, and welcome view. Hosted by <code>ChatViewPane</code> (sidebar), <code>ChatEditor</code> (editor tab), or <code>ChatQuick</code> (overlay).</p>
+</div>
+
+<h3>3.2 Message List</h3>
+<div class="card">
+  <p><strong>ChatListWidget</strong> (<code>chatListWidget.ts</code>) wraps a <code>WorkbenchObjectTree</code> &mdash; VS Code's standard virtualized list.</p>
+  <p><strong>ChatListItemRenderer</strong> (<code>chatListRenderer.ts:184</code>) renders each request/response using 47+ content part types.</p>
+  <p><strong>ChatListDelegate</strong> (<code>chatListRenderer.ts:3298</code>) extends <code>CachedListVirtualDelegate</code> for dynamic height estimation.</p>
+</div>
+
+<h3>3.3 Input Box</h3>
+<div class="card">
+  <p><strong>ChatInputPart</strong> (<code>chatInputPart.ts:220</code>) &mdash; a <code>CodeEditorWidget</code> (full Monaco editor instance) with attachments, mode picker, model picker, tools selector, and send button.</p>
+  <p><code>acceptInput()</code> at line 1538 captures input and fires events. The input uses the <code>vscodeChatInput:</code> URI scheme.</p>
+</div>
+
+<h3>3.4 Content Parts (47+ types)</h3>
+<p>Located in <code>browser/widget/chatContentParts/</code>:</p>
+<table>
+  <tr><th>Part</th><th>File</th><th>What It Renders</th></tr>
+  <tr><td>Markdown</td><td><code>chatMarkdownContentPart.ts</code></td><td>Rich markdown with links, tables, images, KaTeX math</td></tr>
+  <tr><td>Code Blocks</td><td><code>codeBlockPart.ts</code></td><td>Full Monaco editors with syntax highlighting, copy/apply toolbar</td></tr>
+  <tr><td>Diff Blocks</td><td><code>chatDiffBlockPart.ts</code></td><td>Side-by-side diff views via Monaco DiffEditorWidget</td></tr>
+  <tr><td>Thinking</td><td><code>chatThinkingContentPart.ts</code></td><td>Collapsible reasoning display with shimmer animation</td></tr>
+  <tr><td>Tool Invocations</td><td><code>toolInvocationParts/</code> (22 files)</td><td>Progress, confirmation, input/output for tool calls</td></tr>
+  <tr><td>Progress</td><td><code>chatProgressContentPart.ts</code></td><td>Animated spinners with status text</td></tr>
+  <tr><td>Confirmations</td><td><code>chatConfirmationContentPart.ts</code></td><td>Accept/reject dialogs inline in chat</td></tr>
+  <tr><td>File Trees</td><td><code>chatTreeContentPart.ts</code></td><td>Interactive file tree widgets</td></tr>
+  <tr><td>Workspace Edits</td><td><code>chatWorkspaceEditContentPart.ts</code></td><td>File create/rename/delete summaries with icons</td></tr>
+  <tr><td>References</td><td><code>chatReferencesContentPart.ts</code></td><td>Clickable file/symbol reference pills</td></tr>
+  <tr><td>Incremental Rendering</td><td><code>chatIncrementalRendering/</code> (10 files)</td><td>Smooth DOM morphing for streaming tokens</td></tr>
+</table>
+
+<h2 id="s4">4. Data Entry Point &amp; Request Lifecycle</h2>
+
+<pre><code>User types message in ChatInputPart (Monaco editor)
+  &rarr; ChatWidget.acceptInput()                    [chatWidget.ts:2270]
+  &rarr; ChatWidget._acceptInput()                   [chatWidget.ts:2368]
+  &rarr; chatService.sendRequest(sessionResource, msg, options)
+                                                  [chatWidget.ts:2517]
+  &rarr; ChatServiceImpl.sendRequest()               [chatServiceImpl.ts:890]
+      &rarr; parseChatRequest() detects @agent /cmd   [chatServiceImpl.ts:994]
+      &rarr; _sendRequestAsync()                      [chatServiceImpl.ts:1025]
+          &rarr; model.addRequest() (shows in UI immediately)
+          &rarr; Collects hooks + instructions (async, parallel)
+          &rarr; Builds IChatAgentRequest              [chatServiceImpl.ts:1246]
+          &rarr; chatAgentService.invokeAgent()        [chatServiceImpl.ts:1359]
+              &rarr; agent.impl.invoke(request, progressCallback, history, token)
+  &rarr; progressCallback fires with IChatProgress[]  [chatServiceImpl.ts:1058]
+      &rarr; model.acceptResponseProgress()            [chatModel.ts:2758]
+          &rarr; ChatResponseModel.updateContent()
+          &rarr; fires onDidChange &rarr; UI re-renders</code></pre>
+
+<h3>Key Service Interfaces</h3>
+
+<div class="card card-accent">
+  <h4>IChatService (<code>chatService/chatService.ts:1522</code>)</h4>
+  <p>Manages chat sessions. Key methods:</p>
+  <ul>
+    <li><code>sendRequest(sessionResource, message, options)</code> &mdash; entry point for all chat messages</li>
+    <li><code>startNewLocalSession(location, options)</code> &mdash; creates a new session</li>
+    <li><code>loadSessionFromData(data)</code> &mdash; loads from serialized data</li>
+    <li><code>addCompleteRequest()</code> &mdash; programmatically adds finished request/response pairs</li>
+    <li><code>appendProgress(request, progress)</code> &mdash; injects progress into an existing request</li>
+  </ul>
+</div>
+
+<div class="card card-accent">
+  <h4>IChatAgentService (<code>participants/chatAgents.ts:232</code>)</h4>
+  <p>Manages chat participants. Key methods:</p>
+  <ul>
+    <li><code>registerAgent(id, data)</code> / <code>registerDynamicAgent(data, impl)</code></li>
+    <li><code>invokeAgent(agentId, request, progress, history, token)</code></li>
+    <li><code>getDefaultAgent(location, mode)</code> &mdash; returns the default agent for a context</li>
+  </ul>
+</div>
+
+<div class="card card-accent">
+  <h4>IChatAgentImplementation (<code>participants/chatAgents.ts:91</code>)</h4>
+  <p>The interface our extension implements:</p>
+  <pre><code>interface IChatAgentImplementation {
+  invoke(
+    request: IChatAgentRequest,
+    progress: (parts: IChatProgress[]) =&gt; void,
+    history: IChatAgentHistoryEntry[],
+    token: CancellationToken
+  ): Promise&lt;IChatAgentResult&gt;;
+}</code></pre>
+</div>
+
+<h2 id="s5">5. Chat Participant Registration</h2>
+
+<h3>Two registration paths:</h3>
+
+<h4>Path A: Extension package.json (metadata)</h4>
+<pre><code>{
+  "chatParticipants": [{
+    "id": "our.assistant",
+    "name": "Assistant",
+    "isDefault": true,
+    "locations": ["panel"],
+    "modes": ["ask", "agent", "edit"]
+  }]
+}</code></pre>
+<p>Parsed by <code>chatParticipant.contribution.ts:85</code>. Registers agent metadata via <code>IChatAgentService.registerAgent()</code>.</p>
+
+<h4>Path B: Runtime API (implementation)</h4>
+<pre><code>const agent = vscode.chat.createChatParticipant('our.assistant', handler);
+// handler: (request, context, response, token) =&gt; Promise&lt;ChatResult&gt;</code></pre>
+<p>Implementation in <code>extHostChatAgents2.ts</code>. Bridges to main thread via <code>MainThreadChatAgents2</code> (<code>mainThreadChatAgents2.ts:100</code>).</p>
+
+<div class="card card-green">
+  <p><strong>Default agent priority:</strong> When multiple extensions claim <code>isDefault: true</code>, the system prefers extension agents over core agents (<code>_preferExtensionAgents()</code> at <code>chatAgents.ts:505</code>). Our extension's agent will take priority over Copilot's.</p>
+</div>
+
+<h3>Copilot's Registration (for reference)</h3>
+<ul>
+  <li><code>extensions/copilot/package.json:1336</code> &mdash; declares <code>github.copilot.default</code> with <code>isDefault: true</code></li>
+  <li><code>extensions/copilot/src/extension/conversation/vscode-node/chatParticipants.ts:96</code> &mdash; runtime <code>createChatParticipant()</code></li>
+  <li>Registers multiple agents: default, editing, edits, terminal, vscode, notebook</li>
+</ul>
+
+<h2 id="s6">6. Response Streaming</h2>
+
+<h3>Extension Host &rarr; Main Thread &rarr; UI</h3>
+<ol>
+  <li><code>ChatAgentResponseStream</code> (<code>extHostChatAgents2.ts:44</code>) creates the <code>vscode.ChatResponseStream</code> API object</li>
+  <li>Stream methods (<code>markdown()</code>, <code>progress()</code>, etc.) call <code>_report()</code> (line 117)</li>
+  <li><code>_report()</code> queues progress DTOs into a <code>sendQueue</code> array (line 92)</li>
+  <li>A <strong>microtask</strong> batches the queue and sends via RPC: <code>$handleProgressChunk(requestId, sendQueue)</code> (line 105)</li>
+  <li><code>MainThreadChatAgents2</code> receives chunks, looks up the pending progress callback by <code>requestId</code> (line 472)</li>
+  <li>Calls <code>model.acceptResponseProgress(request, progressItem)</code> (line 1079 of chatServiceImpl.ts)</li>
+  <li><code>ChatModel.acceptResponseProgress()</code> (<code>chatModel.ts:2758</code>) updates the <code>ChatResponseModel</code></li>
+  <li>Fires <code>onDidChange</code> &rarr; <code>ChatListItemRenderer</code> re-renders the appropriate content parts</li>
+</ol>
+
+<h2 id="s7">7. The ChatResponseStream API &mdash; What You Get for Free</h2>
+
+<p>Our extension handler receives a <code>ChatResponseStream</code> and calls methods on it. The UI renders automatically:</p>
+
+<table>
+  <tr><th>Method</th><th>Renders As</th><th>API Status</th></tr>
+  <tr><td><code>response.markdown(value)</code></td><td>Rich markdown (headings, bold, tables, code blocks as Monaco editors)</td><td><span class="tag tag-free">Stable</span></td></tr>
+  <tr><td><code>response.progress(msg)</code></td><td>Animated spinner with status text</td><td><span class="tag tag-free">Stable</span></td></tr>
+  <tr><td><code>response.anchor(uri, title)</code></td><td>Clickable inline file/symbol link</td><td><span class="tag tag-free">Stable</span></td></tr>
+  <tr><td><code>response.reference(uri)</code></td><td>Reference pill in message footer</td><td><span class="tag tag-free">Stable</span></td></tr>
+  <tr><td><code>response.button(command)</code></td><td>Clickable command button</td><td><span class="tag tag-free">Stable</span></td></tr>
+  <tr><td><code>response.filetree(tree, baseUri)</code></td><td>Interactive file tree widget</td><td><span class="tag tag-free">Stable</span></td></tr>
+  <tr><td><code>response.textEdit(uri, edits)</code></td><td>Inline diff view (original vs modified)</td><td><span class="tag tag-custom">Proposed</span></td></tr>
+  <tr><td><code>response.workspaceEdit(edit)</code></td><td>File create/rename/delete summary</td><td><span class="tag tag-custom">Proposed</span></td></tr>
+  <tr><td><code>response.confirmation(title, msg, data)</code></td><td>Accept/reject dialog inline</td><td><span class="tag tag-custom">Proposed</span></td></tr>
+  <tr><td><code>response.thinkingProgress(delta)</code></td><td>Collapsible thinking block with shimmer</td><td><span class="tag tag-custom">Proposed</span></td></tr>
+  <tr><td><code>response.beginToolInvocation(id, name)</code></td><td>Tool call progress with confirmation flow</td><td><span class="tag tag-custom">Proposed</span></td></tr>
+</table>
+
+<div class="card card-green">
+  <p><strong>Code block toolbar actions are automatic:</strong> Every code fence in <code>markdown()</code> gets Copy, Insert at Cursor, Apply in Editor, and Insert into New File buttons (<code>chatCodeblockActions.ts</code>). No custom code needed.</p>
+</div>
+
+<p><span class="tag tag-custom">Proposed</span> APIs require the <code>chatParticipantAdditions</code> proposed API, which is trivially available in our fork.</p>
+
+<h2 id="s8">8. Tools, MCP Servers &amp; Skills</h2>
+
+<h3>8.1 Language Model Tools</h3>
+<div class="card">
+  <p><strong>Service:</strong> <code>ILanguageModelToolsService</code> (<code>tools/languageModelToolsService.ts:527</code>)</p>
+  <p>Unified registry for all tools. Three sources:</p>
+  <ul>
+    <li><strong>Built-in tools</strong> (<code>builtinTools/tools.ts</code>) &mdash; EditTool, AskQuestionsTool, ConfirmationTool, RunSubagentTool, etc.</li>
+    <li><strong>MCP tools</strong> &mdash; registered by <code>McpLanguageModelToolContribution</code> from running MCP servers</li>
+    <li><strong>Extension tools</strong> &mdash; registered via <code>vscode.lm.registerTool()</code></li>
+  </ul>
+  <p>Tools are passed to the agent in <code>IChatAgentRequest.userSelectedTools</code>. The tool call lifecycle:</p>
+  <pre><code>LLM decides to call a tool
+  &rarr; response.beginToolInvocation(toolCallId, toolName)
+  &rarr; UI shows tool progress part (spinner)
+  &rarr; toolsService.invokeTool() executes it
+  &rarr; Confirmation flow if needed (UI shows approve/reject)
+  &rarr; Result sent back to extension &rarr; LLM continues</code></pre>
+</div>
+
+<h3>8.2 MCP Server Architecture</h3>
+<div class="card">
+  <p><strong>Location:</strong> <code>src/vs/workbench/contrib/mcp/common/</code></p>
+  <p><strong>Bridge:</strong> <code>McpLanguageModelToolContribution</code> (<code>mcpLanguageModelToolContribution.ts:41</code>) watches <code>McpService.servers</code> and auto-registers each server's tools into <code>ILanguageModelToolsService</code>.</p>
+  <p><strong>Discovery sources:</strong></p>
+  <ul>
+    <li>VS Code settings (<code>mcp.servers</code> in <code>settings.json</code>)</li>
+    <li>Claude Desktop config (<code>claude_desktop_config.json</code>) &mdash; adapter at <code>nativeMcpDiscoveryAdapters.ts:64</code></li>
+    <li>Windsurf (<code>~/.codeium/windsurf/mcp_config.json</code>)</li>
+    <li>Cursor (<code>~/.cursor/mcp.json</code>)</li>
+    <li>Workspace <code>.vscode/mcp.json</code></li>
+    <li>Extension contributions</li>
+  </ul>
+  <p><strong>For our use case:</strong> VS Code hosts MCP servers centrally. Our agent queries <code>getTools()</code>, serializes tool definitions to the CLI assistant, and routes tool calls back through <code>invokeTool()</code>.</p>
+</div>
+
+<h3>8.3 Skills &amp; Custom Agents</h3>
+<div class="card">
+  <p>Skills are <code>.prompt.md</code> files discovered by <code>IPromptsService</code>. They're prompt injections, not callable tools.</p>
+  <p>Custom agents (<code>ICustomAgent</code> at <code>promptsService.ts:225</code>) are <code>.prompt.md</code> files with agent frontmatter, offering <code>tools</code>, <code>model</code>, <code>agents</code> (sub-agents), <code>hooks</code>, and <code>agentInstructions</code> fields.</p>
+  <p>Skills are filtered by <code>sessionType</code>, so they can be scoped per CLI assistant.</p>
+</div>
+
+<h2 id="s9">9. Input Area &amp; Completions System</h2>
+
+<h3>Built-in @ / # Completions (all free)</h3>
+<p>The <code>BuiltinDynamicCompletions</code> class (<code>chatInputCompletions.ts:836</code>) registers completions triggered by <code>#</code> or <code>@</code>:</p>
+
+<table>
+  <tr><th>Trigger</th><th>What It Does</th><th>Search Method</th></tr>
+  <tr><td><code>@file:name</code> / <code>#file:name</code></td><td>Fuzzy file &amp; folder search across workspace</td><td><code>ISearchService</code> + recent history</td></tr>
+  <tr><td><code>@selection</code></td><td>Attaches current editor selection with line range</td><td>Active editor introspection</td></tr>
+  <tr><td><code>@sym:name</code></td><td>Symbol search (functions, classes, variables)</td><td><code>IOutlineModelService</code> cached models</td></tr>
+  <tr><td><code>#session:title</code></td><td>Attach a previous chat session as context</td><td><code>IChatSessionsService</code></td></tr>
+  <tr><td><code>#toolName</code></td><td>Reference a specific tool by name</td><td><code>selectedToolsModel.entriesMap</code></td></tr>
+</table>
+
+<h3>Slash Command Discovery</h3>
+<p>The <code>SlashCommandCompletions</code> class (<code>chatInputCompletions.ts:79</code>) provides:</p>
+<ul>
+  <li><strong>Global slash commands</strong> from <code>IChatSlashCommandService</code>, filtered by location/mode/sessionType</li>
+  <li><strong>Prompt-file commands</strong> from <code>.prompt.md</code> files via <code>harnessService.getSlashCommands()</code></li>
+  <li><strong>Per-agent subcommands</strong> from each agent's <code>slashCommands</code> array</li>
+</ul>
+
+<div class="card card-green">
+  <p>Completions are scoped by <code>widget.lockedAgentId</code> and <code>agent.capabilities</code>. Setting <code>supportsFileAttachments</code>, <code>supportsToolAttachments</code>, or <code>supportsPromptAttachments</code> per assistant controls what appears.</p>
+</div>
+
+<h2 id="s10">10. Toolbar Actions &amp; Picker Replacement</h2>
+
+<h3>All Chat Menu IDs</h3>
+<table>
+  <tr><th>MenuId</th><th>Location</th></tr>
+  <tr><td><code>ChatInput</code></td><td>Primary toolbar inside input &mdash; mode, model, tools, attach pickers</td></tr>
+  <tr><td><code>ChatExecute</code></td><td>Send/Stop button area</td></tr>
+  <tr><td><code>ChatInputSecondary</code></td><td>Secondary toolbar below input &mdash; session target, permissions</td></tr>
+  <tr><td><code>ChatInputSide</code></td><td>Side of input area</td></tr>
+  <tr><td><code>ChatCodeBlock</code></td><td>Code block toolbar &mdash; Copy, Insert, Apply</td></tr>
+  <tr><td><code>ChatCompareBlock</code></td><td>Diff block toolbar</td></tr>
+  <tr><td><code>ChatMessageTitle</code></td><td>Per-message header &mdash; hover actions</td></tr>
+  <tr><td><code>ChatMessageFooter</code></td><td>Message footer</td></tr>
+  <tr><td><code>ChatModePicker</code></td><td>Mode picker dropdown items</td></tr>
+  <tr><td><code>ChatContext</code></td><td>Context attachment menu</td></tr>
+</table>
+
+<h3>Replacing Model Picker with Assistant Picker</h3>
+<div class="card card-accent">
+  <p>The model picker is a <code>ModelPickerActionItem</code> wrapping <code>ModelPickerWidget</code>, driven by <code>IModelPickerDelegate</code> (<code>modelPickerActionItem.ts:22</code>).</p>
+  <p>Each item supports <code>name</code>, <code>icon</code>, <code>description</code>, <code>checked</code> state, <code>enabled</code>, <code>statusIcon</code>, and inline <code>toolbarActions</code> (for the Install button).</p>
+  <p><strong>Approach:</strong> Create an <code>AssistantPickerActionItem</code> registered on <code>MenuId.ChatInput</code>, hide <code>OpenModelPickerAction</code> via <code>when</code> context key. Structure items as:</p>
+  <pre><code>  &mdash; Installed &mdash;
+    [Claude icon] Claude Code          &check;
+    [Copilot icon] GitHub Copilot
+  &mdash; Available &mdash;
+    [Codex icon] OpenAI Codex          [Install]
+    [Gemini icon] Gemini CLI           [Install]</code></pre>
+  <p>Install button: use <code>toolbarActions</code> with a spinner codicon (<code>Codicon.loading~spin</code>) during install, then refresh the list.</p>
+</div>
+
+<h2 id="s11">11. Visual Polish &mdash; Animations, Theming, Colors</h2>
+
+<h3>Animations (all automatic)</h3>
+<table>
+  <tr><th>Animation</th><th>CSS Location</th><th>What It Does</th></tr>
+  <tr><td>Thinking shimmer</td><td><code>chat.css:2850</code></td><td>Gradient sweep across "Thinking..."/"Reasoning..." text, 2s cycle, using <code>chat.thinkingShimmer</code> color</td></tr>
+  <tr><td>Animated ellipsis</td><td><code>chat.css:102</code></td><td>CSS <code>steps(4)</code> dots animation while waiting</td></tr>
+  <tr><td>Input border beam</td><td><code>chat.css:891</code></td><td>Conic-gradient comet traveling around input perimeter via <code>@property --chat-input-anim-angle</code></td></tr>
+  <tr><td>Incremental rendering</td><td><code>chatIncrementalRendering/</code></td><td>DOM morphing for streaming tokens &mdash; no layout thrash</td></tr>
+</table>
+<p>Fun detail: ~1-in-100 chance of easter egg thinking messages ("Summoning Clippy", "Mining diamonds", "Bribing the hamster").</p>
+
+<h3>Theme Color Tokens</h3>
+<p>All defined in <code>chatColors.ts</code>:</p>
+<table>
+  <tr><th>Token</th><th>Purpose</th></tr>
+  <tr><td><code>chat.requestBackground</code> / <code>chat.requestBorder</code></td><td>User message bubble</td></tr>
+  <tr><td><code>chat.avatarBackground</code> / <code>chat.avatarForeground</code></td><td>Avatar circle</td></tr>
+  <tr><td><code>chat.slashCommandBackground</code> / <code>Foreground</code></td><td>/command pills and #reference pills</td></tr>
+  <tr><td><code>chat.thinkingShimmer</code></td><td>Shimmer highlight color (white dark / black light)</td></tr>
+  <tr><td><code>chat.inputWorkingBorderColor1</code> / <code>Color2</code></td><td>Animated input border comet</td></tr>
+  <tr><td><code>chat.linesAddedForeground</code> / <code>linesRemovedForeground</code></td><td>Diff stats in code block pills</td></tr>
+  <tr><td><code>chat.checkpointSeparator</code></td><td>Turn separator lines</td></tr>
+</table>
+
+<h2 id="s12">12. Virtualization &amp; Performance</h2>
+
+<div class="card">
+  <p><strong>List virtualization:</strong> <code>ChatListWidget</code> wraps <code>WorkbenchObjectTree</code> (backed by VS Code's standard <code>ListView</code>). Items scrolling out of view trigger <code>disposeElement()</code> which clears disposables and codeblock URI mappings.</p>
+
+  <p><strong>Editor pooling:</strong> <code>EditorPool</code> (<code>chatContentCodePools.ts:15</code>) is a <code>KeyedResourcePool</code> with <code>maxIdleSize: 2</code>:</p>
+  <ul>
+    <li>Code blocks acquire editors from the pool on render, release on scroll-out</li>
+    <li>Keyed reuse &mdash; tries to return the <em>same</em> editor for the same code block when scrolling back</li>
+    <li>10-second debounce before trimming excess idle editors (prevents churn during scrolling/streaming)</li>
+    <li>Separate <code>DiffEditorPool</code> for diff views</li>
+  </ul>
+
+  <p><strong>Cost model:</strong> N editors for visible code blocks + 2 warm spares. Monaco construction cost is amortized through pooling.</p>
+</div>
+
+<h2 id="s13">13. Reusing Components Outside the Chat Panel</h2>
+
+<div class="card card-green">
+  <p class="verdict verdict-yes">The ChatWidget is designed to be embedded in different containers.</p>
+</div>
+
+<p><strong>Embedding a read-only chat widget:</strong></p>
+<pre><code>const widget = instantiationService.createInstance(ChatWidget,
+    location, viewContext,
+    {
+      rendererOptions: { noHeader: true, noFooter: true, editable: false },
+      renderFollowups: false,
+      renderStyle: 'compact',
+    },
+    styles
+);
+widget.render(parentElement);
+
+// Load historical data
+const modelRef = chatService.loadSessionFromData(serializedData);
+widget.setModel(modelRef.object);
+
+// Or add individual complete request/response pairs
+chatService.addCompleteRequest(sessionResource, 'user msg', variableData, 0, {
+  message: new MarkdownString('**response**'),
+});</code></pre>
+
+<p><strong>Standalone markdown rendering</strong> (without chat session machinery):</p>
+<pre><code>const renderer = instantiationService.createInstance(ChatContentMarkdownRenderer);
+const result = renderer.render(new MarkdownString('**bold** and `code`'));
+parentElement.appendChild(result.element);</code></pre>
+
+<h2 id="s14">14. Shared Lib Feasibility (Nx Monorepo / Web App)</h2>
+
+<div class="card card-yellow">
+  <p class="verdict verdict-partial">Direct component extraction is not feasible. The components are deeply coupled to VS Code's DI system (14+ injected services per content part). But a shared data layer is practical.</p>
+</div>
+
+<h3>Why direct extraction fails</h3>
+<ul>
+  <li><code>ChatMarkdownContentPart</code> alone injects 14 services: <code>IContextKeyService</code>, <code>IConfigurationService</code>, <code>IEditorService</code>, <code>IModelService</code>, <code>ILanguageService</code>, <code>IMenuService</code>, <code>IHoverService</code>, <code>IChatService</code>, etc.</li>
+  <li><code>CodeBlockPart</code> creates full <code>CodeEditorWidget</code> / <code>DiffEditorWidget</code> instances</li>
+  <li>The DI system (<code>createDecorator</code> / <code>@IService</code>) requires the full <code>InstantiationService</code> bootstrap</li>
+  <li>Chat components are NOT part of Monaco editor &mdash; they live in the workbench layer above it</li>
+</ul>
+
+<h3>Recommended Nx structure</h3>
+<pre><code>nx-monorepo/
+  libs/
+    chat-types/          &larr; SHARED: IChatProgress, ISerializableChatData,
+                            IExportableChatData (pure TS, zero deps)
+    chat-markdown/       &larr; SHARED: base markdown renderer extracted from
+                            vs/base/browser/markdownRenderer.ts + marked parser
+    chat-css/            &larr; SHARED: CSS custom properties, shimmer animation,
+                            layout vars (remap --vscode-* tokens)
+
+  apps/
+    code-oss/            &larr; VS Code fork (native components as-is)
+    web-app/             &larr; Web app with own components consuming shared types
+      chat-renderer/     &larr; React/Svelte components using chat-types,
+                            chat-markdown, Monaco standalone for code blocks</code></pre>
+
+<h2 id="s15">15. Multi-Window Routing (Remote Web Server)</h2>
+
+<h3>Architecture: one extension server, many browser tabs</h3>
+
+<div class="diagram">
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474;  Server (one per machine)                                  &#9474;
+&#9474;                                                             &#9474;
+&#9474;  &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;      &#9474;
+&#9474;  &#9474; Extension Host (Remote)                     &#9474;      &#9474;
+&#9474;  &#9474;  ExtHostChatAgents2 (ONE instance)           &#9474;      &#9474;
+&#9474;  &#9474;  - our extension runs HERE                   &#9474;      &#9474;
+&#9474;  &#9474;  - handles $invokeAgent(requestId, ...)      &#9474;      &#9474;
+&#9474;  &#9474;  - sends $handleProgressChunk(requestId, ..) &#9474;      &#9474;
+&#9474;  &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;      &#9474;
+&#9474;                 &#9474; RPC per connection                       &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+        &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+        &#9474;                   &#9474;
+   &#9484;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9488;      &#9484;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9488;
+   &#9474; Browser &#9474;      &#9474; Browser &#9474;    &larr; one per worktree
+   &#9474; Tab 1   &#9474;      &#9474; Tab 2   &#9474;
+   &#9474;         &#9474;      &#9474;         &#9474;
+   &#9474; MainThreadChatAgents2  &#9474;    &larr; one per browser tab
+   &#9474; ChatServiceImpl        &#9474;    &larr; one per browser tab
+   &#9474; ChatWidget             &#9474;    &larr; one per browser tab
+   &#9474; _pendingProgress map   &#9474;    &larr; scoped per tab
+   &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;      &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</div>
+
+<h3>Routing mechanism: <code>requestId</code></h3>
+<div class="card">
+  <ol>
+    <li>Browser tab 1's <code>ChatWidget._acceptInput()</code> calls <code>chatService.sendRequest()</code></li>
+    <li><code>ChatServiceImpl</code> creates a unique <code>requestId</code>, stores the <code>progressCallback</code> in <code>MainThreadChatAgents2._pendingProgress</code> keyed by <code>requestId</code></li>
+    <li>Request sent to extension host via RPC: <code>$invokeAgent(handle, request)</code></li>
+    <li>Extension processes request, calls <code>$handleProgressChunk(requestId, chunks)</code></li>
+    <li>RPC layer routes the response to the <strong>correct browser tab's</strong> <code>MainThreadChatAgents2</code> &mdash; the proxy is scoped per connection</li>
+    <li>That tab's <code>_pendingProgress.get(requestId)</code> finds the right callback</li>
+    <li>Progress flows to the right <code>ChatModel</code> &rarr; right <code>ChatWidget</code></li>
+  </ol>
+  <p><strong>No session ID routing needed.</strong> Each browser tab has its own service instances. The RPC channel is per-connection. Our extension doesn't need to know which UI it's talking to &mdash; it just responds to the request it received.</p>
+  <p><strong>One thing to track:</strong> If our extension spawns a long-running CLI process per chat session, we need to map <code>requestId</code> / <code>sessionResource</code> to the right process for cancellation.</p>
+</div>
+
+<h2 id="s16">16. Recommended Architecture</h2>
+
+<div class="card card-green">
+<h3>Phase 1: Core Pipeline</h3>
+<ol>
+  <li><strong>Embed code-oss</strong> served as a web app (one instance per worktree, as already done)</li>
+  <li><strong>Build an extension</strong> that registers a chat participant via <code>vscode.chat.createChatParticipant(id, handler)</code> with <code>isDefault: true</code></li>
+  <li><strong>In the handler:</strong>
+    <ul>
+      <li>Receive <code>(request, context, response, token)</code></li>
+      <li>Spawn / connect to the selected CLI assistant as a child process</li>
+      <li>Parse CLI stdout and map to <code>response.markdown()</code>, <code>.thinkingProgress()</code>, <code>.beginToolInvocation()</code>, etc.</li>
+    </ul>
+  </li>
+</ol>
+</div>
+
+<div class="card card-accent">
+<h3>Phase 2: UI Customization</h3>
+<ul>
+  <li><strong>Replace model picker</strong> with assistant picker (installed vs. available, with Install button)</li>
+  <li><strong>Scope capabilities</strong> per assistant via <code>IChatAgentData.capabilities</code></li>
+  <li><strong>Scope skills/commands</strong> per assistant via <code>sessionType</code> filtering</li>
+  <li><strong>MCP:</strong> VS Code hosts MCP servers centrally; agent serializes tool definitions to CLIs and routes tool calls back through <code>invokeTool()</code></li>
+</ul>
+</div>
+
+<div class="card card-yellow">
+<h3>Phase 3: Web App Integration</h3>
+<ul>
+  <li>Share <code>chat-types</code> (pure TS interfaces) in Nx monorepo lib</li>
+  <li>Share CSS design tokens (remap <code>--vscode-*</code> variables)</li>
+  <li>Web app renders with own components + Monaco standalone for code blocks</li>
+  <li>Use <code>ISerializableChatData</code> as the interchange format</li>
+</ul>
+</div>
+
+<h3>What we build vs. what's free</h3>
+<table>
+  <tr><th>Component</th><th>Status</th><th>Notes</th></tr>
+  <tr><td>Chat panel UI</td><td><span class="tag tag-free">Free</span></td><td>All rendering, streaming, animations, virtualization</td></tr>
+  <tr><td>Code blocks (Monaco, syntax, toolbar)</td><td><span class="tag tag-free">Free</span></td><td>Pooled editors, copy/insert/apply actions</td></tr>
+  <tr><td>File/symbol/tool @ completions</td><td><span class="tag tag-free">Free</span></td><td>Full workspace search, recent files, symbols</td></tr>
+  <tr><td>Slash commands &amp; skills</td><td><span class="tag tag-free">Free</span></td><td>Per-agent scoping via sessionType</td></tr>
+  <tr><td>Tool call UI &amp; confirmations</td><td><span class="tag tag-free">Free</span></td><td>Progress, approve/reject, input/output display</td></tr>
+  <tr><td>MCP server management</td><td><span class="tag tag-free">Free</span></td><td>Discovery, auto-start, tool registration</td></tr>
+  <tr><td>Diff views &amp; workspace edits</td><td><span class="tag tag-free">Free</span></td><td>Inline diffs, file create/rename/delete</td></tr>
+  <tr><td>Theming &amp; animations</td><td><span class="tag tag-free">Free</span></td><td>Shimmer, border beam, all color tokens</td></tr>
+  <tr><td>Multi-window routing</td><td><span class="tag tag-free">Free</span></td><td>Automatic per requestId via RPC</td></tr>
+  <tr><td>CLI &harr; ChatResponseStream translation</td><td><span class="tag tag-build">Build</span></td><td>Parse CLI stdout, map to response.* calls</td></tr>
+  <tr><td>Assistant picker (replaces model picker)</td><td><span class="tag tag-build">Build</span></td><td>Installed/available with install button</td></tr>
+  <tr><td>CLI process management</td><td><span class="tag tag-build">Build</span></td><td>Spawn, cancel, track per requestId</td></tr>
+  <tr><td>ACP / protocol handling</td><td><span class="tag tag-build">Build</span></td><td>No built-in ACP; translate per-CLI protocol</td></tr>
+</table>
+
+<h2 id="s17">17. Key File Index</h2>
+
+<table>
+  <tr><th>Area</th><th>File</th><th>Key Symbol</th><th>Line</th></tr>
+  <tr><td>Widget</td><td><code>browser/widget/chatWidget.ts</code></td><td><code>ChatWidget</code></td><td>209</td></tr>
+  <tr><td>Input</td><td><code>browser/widget/input/chatInputPart.ts</code></td><td><code>ChatInputPart</code></td><td>220</td></tr>
+  <tr><td>Message List</td><td><code>browser/widget/chatListWidget.ts</code></td><td><code>ChatListWidget</code></td><td>126</td></tr>
+  <tr><td>Renderer</td><td><code>browser/widget/chatListRenderer.ts</code></td><td><code>ChatListItemRenderer</code></td><td>184</td></tr>
+  <tr><td>Service Interface</td><td><code>common/chatService/chatService.ts</code></td><td><code>IChatService</code></td><td>1522</td></tr>
+  <tr><td>Service Impl</td><td><code>common/chatService/chatServiceImpl.ts</code></td><td><code>sendRequest()</code></td><td>890</td></tr>
+  <tr><td>Agent Service</td><td><code>common/participants/chatAgents.ts</code></td><td><code>IChatAgentService</code></td><td>232</td></tr>
+  <tr><td>Agent Interface</td><td><code>common/participants/chatAgents.ts</code></td><td><code>IChatAgentImplementation</code></td><td>91</td></tr>
+  <tr><td>Agent Invocation</td><td><code>common/participants/chatAgents.ts</code></td><td><code>invokeAgent()</code></td><td>524</td></tr>
+  <tr><td>Model</td><td><code>common/model/chatModel.ts</code></td><td><code>acceptResponseProgress()</code></td><td>2758</td></tr>
+  <tr><td>Session URIs</td><td><code>common/model/chatUri.ts</code></td><td><code>LocalChatSessionUri</code></td><td>17</td></tr>
+  <tr><td>Serialization</td><td><code>common/model/chatModel.ts</code></td><td><code>ISerializableChatData</code></td><td>1754</td></tr>
+  <tr><td>Ext Host Stream</td><td><code>api/common/extHostChatAgents2.ts</code></td><td><code>ChatAgentResponseStream</code></td><td>44</td></tr>
+  <tr><td>Main Thread Bridge</td><td><code>api/browser/mainThreadChatAgents2.ts</code></td><td><code>MainThreadChatAgents2</code></td><td>100</td></tr>
+  <tr><td>Progress Routing</td><td><code>api/browser/mainThreadChatAgents2.ts</code></td><td><code>$handleProgressChunk()</code></td><td>472</td></tr>
+  <tr><td>View Pane</td><td><code>browser/widgetHosts/viewPane/chatViewPane.ts</code></td><td><code>ChatViewPane</code></td><td>87</td></tr>
+  <tr><td>Completions</td><td><code>browser/widget/input/editor/chatInputCompletions.ts</code></td><td><code>BuiltinDynamicCompletions</code></td><td>836</td></tr>
+  <tr><td>Markdown Renderer</td><td><code>browser/widget/chatContentMarkdownRenderer.ts</code></td><td><code>ChatContentMarkdownRenderer</code></td><td>67</td></tr>
+  <tr><td>Code Block Pool</td><td><code>browser/widget/chatContentParts/chatContentCodePools.ts</code></td><td><code>EditorPool</code></td><td>15</td></tr>
+  <tr><td>Model Picker</td><td><code>browser/widget/input/chatModelPicker.ts</code></td><td><code>ModelPickerWidget</code></td><td>—</td></tr>
+  <tr><td>Model Picker Delegate</td><td><code>browser/widget/input/modelPickerActionItem.ts</code></td><td><code>IModelPickerDelegate</code></td><td>22</td></tr>
+  <tr><td>Colors</td><td><code>common/widget/chatColors.ts</code></td><td>Theme color tokens</td><td>—</td></tr>
+  <tr><td>CSS</td><td><code>browser/widget/media/chat.css</code></td><td>All chat styles</td><td>—</td></tr>
+  <tr><td>Tools Service</td><td><code>common/tools/languageModelToolsService.ts</code></td><td><code>ILanguageModelToolsService</code></td><td>527</td></tr>
+  <tr><td>Built-in Tools</td><td><code>common/tools/builtinTools/tools.ts</code></td><td><code>BuiltinToolsContribution</code></td><td>22</td></tr>
+  <tr><td>MCP Service</td><td><code>contrib/mcp/common/mcpService.ts</code></td><td><code>McpService</code></td><td>25</td></tr>
+  <tr><td>MCP Tool Bridge</td><td><code>contrib/mcp/common/mcpLanguageModelToolContribution.ts</code></td><td><code>McpLanguageModelToolContribution</code></td><td>41</td></tr>
+  <tr><td>MCP Discovery</td><td><code>contrib/mcp/common/discovery/nativeMcpDiscoveryAdapters.ts</code></td><td><code>ClaudeDesktopMpcDiscoveryAdapter</code></td><td>64</td></tr>
+  <tr><td>Skills</td><td><code>common/promptSyntax/service/promptsService.ts</code></td><td><code>IAgentSkill</code></td><td>375</td></tr>
+  <tr><td>Custom Agents</td><td><code>common/promptSyntax/service/promptsService.ts</code></td><td><code>ICustomAgent</code></td><td>225</td></tr>
+  <tr><td>Participant Contrib</td><td><code>browser/chatParticipant.contribution.ts</code></td><td>Extension point registration</td><td>85</td></tr>
+  <tr><td>Copilot Agents</td><td><code>extensions/copilot/.../chatParticipants.ts</code></td><td><code>createAgent()</code></td><td>96</td></tr>
+  <tr><td>Copilot Auth</td><td><code>extensions/copilot/.../authentication.contribution.ts</code></td><td><code>AuthenticationContrib</code></td><td>17</td></tr>
+</table>
+
+<hr>
+<p style="text-align: center; color: var(--text-muted); font-size: 0.9em;">Generated from investigation on branch <code>feature/chat-ui-pipeline-investigation</code> &middot; May 2026</p>
+
+</body>
+</html>
