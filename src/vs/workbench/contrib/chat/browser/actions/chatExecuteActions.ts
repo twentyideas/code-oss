@@ -1179,6 +1179,34 @@ class ExecuteHandoffAction extends Action2 {
 }
 
 
+export class OpenAssistantPickerAction extends Action2 {
+	static readonly ID = 'workbench.action.chat.openAssistantPicker';
+
+	constructor() {
+		super({
+			id: OpenAssistantPickerAction.ID,
+			title: localize2('interactive.openAssistantPicker.label', "Select Coding Assistant"),
+			category: CHAT_CATEGORY,
+			f1: false,
+			precondition: ChatContextKeys.enabled,
+			menu: {
+				id: MenuId.ChatInput,
+				order: 1,
+				group: 'navigation',
+			}
+		});
+	}
+
+	override async run(accessor: ServicesAccessor): Promise<void> {
+		const widgetService = accessor.get(IChatWidgetService);
+		const widget = widgetService.lastFocusedWidget;
+		if (widget) {
+			await widgetService.reveal(widget);
+			widget.input.openAssistantPicker();
+		}
+	}
+}
+
 export function registerChatExecuteActions(): DisposableStore {
 	const store = new DisposableStore();
 	store.add(registerAction2(ChatSubmitAction));
@@ -1195,6 +1223,7 @@ export function registerChatExecuteActions(): DisposableStore {
 	store.add(registerAction2(OpenSessionTargetPickerAction));
 	store.add(registerAction2(OpenDelegationPickerAction));
 	store.add(registerAction2(OpenWorkspacePickerAction));
+	store.add(registerAction2(OpenAssistantPickerAction));
 	store.add(registerAction2(ChatSessionPrimaryPickerAction));
 	store.add(registerAction2(ChangeChatModelAction));
 	store.add(registerAction2(CancelEdit));
