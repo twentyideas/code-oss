@@ -94,7 +94,7 @@ import { IChatResponseViewModel, isResponseVM } from '../../../common/model/chat
 import { IChatAgentService } from '../../../common/participants/chatAgents.js';
 import { ILanguageModelToolsService } from '../../../common/tools/languageModelToolsService.js';
 import { ChatHistoryNavigator } from '../../../common/widget/chatWidgetHistoryService.js';
-import { ChatSessionPrimaryPickerAction, ChatSubmitAction, IChatExecuteActionContext, OpenDelegationPickerAction, OpenModelPickerAction, OpenModePickerAction, OpenPermissionPickerAction, OpenSessionTargetPickerAction, OpenWorkspacePickerAction } from '../../actions/chatExecuteActions.js';
+import { ChatSessionPrimaryPickerAction, ChatSubmitAction, IChatExecuteActionContext, OpenAssistantPickerAction, OpenDelegationPickerAction, OpenModelPickerAction, OpenModePickerAction, OpenPermissionPickerAction, OpenSessionTargetPickerAction, OpenWorkspacePickerAction } from '../../actions/chatExecuteActions.js';
 import { AgentSessionProviders, getAgentSessionProvider } from '../../agentSessions/agentSessions.js';
 import { IAgentSessionsService } from '../../agentSessions/agentSessionsService.js';
 import { ChatAttachmentModel } from '../../attachments/chatAttachmentModel.js';
@@ -124,6 +124,8 @@ import { IChatInputPickerOptions } from './chatInputPickerActionItem.js';
 import { ChatSelectedTools } from './chatSelectedTools.js';
 import { DelegationSessionPickerActionItem } from './delegationSessionPickerActionItem.js';
 import { ModelPickerActionItem, IModelPickerDelegate } from './modelPickerActionItem.js';
+import { AssistantPickerActionItem, IAssistantMetadata, IAssistantPickerDelegate } from './assistantPickerActionItem.js';
+import { IDevSwarmService } from '../../../common/devswarm/devswarmService.js';
 import { IModePickerDelegate, ModePickerActionItem } from './modePickerActionItem.js';
 import { IPermissionPickerDelegate, PermissionPickerActionItem } from './permissionPickerActionItem.js';
 import { SessionTypePickerActionItem } from './sessionTargetPickerActionItem.js';
@@ -390,6 +392,8 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 	private chatSessionHasCustomAgentTarget: IContextKey<boolean>;
 	private chatSessionHasTargetedModels: IContextKey<boolean>;
 	private modelWidget: ModelPickerActionItem | undefined;
+	private assistantWidget: AssistantPickerActionItem | undefined;
+	private readonly _currentAssistant = observableValue<IAssistantMetadata | undefined>('currentAssistant', undefined);
 	private modeWidget: ModePickerActionItem | undefined;
 	private permissionWidget: PermissionPickerActionItem | undefined;
 	private sessionTargetWidget: SessionTypePickerActionItem | undefined;
@@ -556,6 +560,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 		@IViewDescriptorService private readonly viewDescriptorService: IViewDescriptorService,
 		@IChatAttachmentWidgetRegistry private readonly _chatAttachmentWidgetRegistry: IChatAttachmentWidgetRegistry,
 		@IChatInputNotificationService private readonly chatInputNotificationService: IChatInputNotificationService,
+		@IDevSwarmService private readonly _devswarmService: IDevSwarmService,
 	) {
 		super();
 
@@ -812,6 +817,10 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 
 	public openModePicker(): void {
 		this.modeWidget?.show();
+	}
+
+	public openAssistantPicker(): void {
+		this.assistantWidget?.openAssistantPicker();
 	}
 
 	public openPermissionPicker(): void {
@@ -2343,6 +2352,17 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 						},
 					};
 					return this.modelWidget = this.instantiationService.createInstance(ModelPickerActionItem, action, itemDelegate, pickerOptions);
+				} else if (action.id === OpenAssistantPickerAction.ID && action instanceof MenuItemAction) {
+					const delegate: IAssistantPickerDelegate = {
+						currentAssistant: this._currentAssistant,
+						setAssistant: (assistant) => {
+							this._devswarmService.setActiveAssistant(assistant.id);
+							this._currentAssistant.set(assistant, undefined);
+						},
+						getInstalledAssistants: () => this._devswarmService.getInstalledAssistants(),
+						getAvailableAssistants: () => this._devswarmService.getAvailableAssistants(),
+					};
+					return this.assistantWidget = this.instantiationService.createInstance(AssistantPickerActionItem, action, delegate);
 				} else if (action.id === OpenModePickerAction.ID && action instanceof MenuItemAction) {
 					const delegate: IModePickerDelegate = {
 						currentMode: this._currentModeObservable,

@@ -4025,8 +4025,17 @@ export interface IDevSwarmResult {
 	errorDetails?: { message: string };
 }
 
+export interface IDevSwarmAssistantDto {
+	id: string;
+	name: string;
+	iconId?: string;
+	installed: boolean;
+	isTestOnly?: boolean;
+}
+
 export interface MainThreadDevSwarmShape extends IDisposable {
 	$handleProgress(requestId: string, chunks: IChatProgressDto[]): void;
+	$setAssistants(installed: IDevSwarmAssistantDto[], available: IDevSwarmAssistantDto[]): void;
 }
 
 export interface ExtHostDevSwarmShape {

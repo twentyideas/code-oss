@@ -59,6 +59,7 @@ import { ChatRequestHooks, mergeHooks } from '../promptSyntax/hookSchema.js';
 import { ComputeAutomaticInstructions } from '../promptSyntax/computeAutomaticInstructions.js';
 import { findLast } from '../../../../../base/common/arraysFind.js';
 import { ChatMode } from '../chatModes.js';
+import { IDevSwarmService } from '../devswarm/devswarmService.js';
 
 const serializedChatKey = 'interactive.sessions';
 
@@ -192,6 +193,7 @@ export class ChatService extends Disposable implements IChatService {
 		@IChatEntitlementService private readonly chatEntitlementService: IChatEntitlementService,
 		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
 		@IChatDebugService private readonly chatDebugService: IChatDebugService,
+		@IDevSwarmService private readonly _devswarmService: IDevSwarmService,
 	) {
 		super();
 
@@ -1206,6 +1208,30 @@ export class ChatService extends Disposable implements IChatService {
 					request = model.addRequest(parsedRequest, initVariableData, attempt, options?.modeInfo, initialAgent, initialCommand, options?.confirmation, options?.locationData, options?.attachedContext, undefined, options?.userSelectedModelId, options?.userSelectedTools?.get(), undefined, options?.isSystemInitiated, options?.systemInitiatedLabel, options?.terminalExecutionId);
 					const thisRequest = request;
 					completeResponseCreated();
+
+					// --- DevSwarm: route to CLI assistant if one is active ---
+					if (this._devswarmService.hasActiveAssistant()) {
+						this._devswarmService.registerProgressCallback(thisRequest.id, progressCallback);
+						const promptText = getPromptText(thisRequest.message).message;
+						try {
+							const devswarmResult = await this._devswarmService.sendToAssistant(
+								this._devswarmService.activeAssistantId!,
+								promptText,
+								thisRequest.id,
+								{ attachedContext: options?.attachedContext, sessionResource: model.sessionResource },
+							);
+							if (devswarmResult.errorDetails) {
+								this.logService.error('[ChatService] DevSwarm assistant error:', devswarmResult.errorDetails.message);
+							}
+						} finally {
+							this._devswarmService.removeProgressCallback(thisRequest.id);
+						}
+						model.setResponse(thisRequest, {});
+						thisRequest.response?.complete();
+						store.dispose();
+						return;
+					}
+					// --- end DevSwarm ---
 
 					// --- Step 2: Collect hooks + instructions in parallel (after UI is shown) ---
 					const [hooksResult, instructionEntries] = await Promise.all([
