@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DevSwarm Chat Architecture v2</title>
+<style>
+  :root {
+    --bg: #1e1e1e; --bg-card: #252526; --bg-code: #1a1a1a; --border: #333;
+    --text: #d4d4d4; --text-muted: #888; --accent: #569cd6; --accent2: #4ec9b0;
+    --accent3: #ce9178; --heading: #e0e0e0; --green: #6a9955; --red: #f44747;
+    --yellow: #dcdcaa; --orange: #d7a04c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+  h1 { color: var(--heading); font-size: 2em; margin-bottom: 8px; }
+  h2 { color: var(--accent); font-size: 1.5em; margin: 48px 0 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { color: var(--accent2); font-size: 1.2em; margin: 32px 0 12px; }
+  h4 { color: var(--accent3); font-size: 1.05em; margin: 24px 0 8px; }
+  p { margin: 12px 0; }
+  .subtitle { color: var(--text-muted); font-size: 1.1em; margin-bottom: 32px; }
+  code { background: var(--bg-code); padding: 2px 6px; border-radius: 3px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.9em; color: var(--accent3); }
+  pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; overflow-x: auto; margin: 16px 0; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.85em; line-height: 1.6; }
+  pre code { background: none; padding: 0; color: var(--text); }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin: 16px 0; }
+  .card-green { border-left: 3px solid var(--green); }
+  .card-yellow { border-left: 3px solid var(--yellow); }
+  .card-red { border-left: 3px solid var(--red); }
+  .card-accent { border-left: 3px solid var(--accent); }
+  .card-orange { border-left: 3px solid var(--orange); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
+  th { background: var(--bg-code); color: var(--accent2); text-align: left; padding: 10px 12px; border: 1px solid var(--border); }
+  td { padding: 8px 12px; border: 1px solid var(--border); }
+  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+  ul, ol { margin: 12px 0 12px 24px; }
+  li { margin: 6px 0; }
+  .diagram { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin: 16px 0; overflow-x: auto; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.82em; line-height: 1.5; white-space: pre; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; margin-right: 4px; }
+  .tag-keep { background: #2d4a2d; color: #6a9955; }
+  .tag-strip { background: #4a2d2d; color: #f44747; }
+  .tag-modify { background: #4a3d2d; color: #dcdcaa; }
+  .tag-new { background: #2d3a4a; color: #569cd6; }
+  .tag-investigate { background: #3d2d4a; color: #c586c0; }
+  .status-yes { color: var(--green); font-weight: 600; }
+  .status-no { color: var(--red); font-weight: 600; }
+  .status-partial { color: var(--yellow); font-weight: 600; }
+  .status-tbd { color: var(--orange); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>DevSwarm Chat Architecture v2</h1>
+<p class="subtitle">Replacing the Copilot agent pipeline with CLI-driven coding assistants</p>
+<p style="color: var(--text-muted); font-size: 0.9em;">May 2026 &middot; DRAFT &mdash; investigation ongoing</p>
+
+<hr>
+
+<h2>1. Core Concept</h2>
+
+<div class="card card-green">
+  <p>The user selects a <strong>coding assistant</strong> (Claude Code, Codex, Copilot CLI, etc.), not a model or agent. That selection determines which CLI process drives the entire chat session. VS Code's chat UI renders the output. Everything in between is translation.</p>
+</div>
+
+<h2>2. What Exists Today vs. What We Build</h2>
+
+<h3>2.1 Current Copilot Architecture (what we're replacing)</h3>
+
+<div class="diagram">
+User types message
+  &rarr; ChatWidget._acceptInput()                     [browser]
+  &rarr; chatService.sendRequest()                      [browser]
+  &rarr; _sendRequestAsync()                            [browser]
+      &rarr; parseChatRequest()  &mdash; detect @agent, /command
+      &rarr; participant detection  &mdash; route to @workspace, @terminal, etc.
+      &rarr; agent resolution  &mdash; find default agent for location/mode
+      &rarr; chatAgentService.invokeAgent()              [browser]
+          &rarr; RPC $invokeAgent()                      [browser &rarr; server]
+          &rarr; ExtHostChatAgents2.$invokeAgent()       [server]
+              &rarr; Copilot extension handler            [server]
+                  &rarr; GitHub API call (proprietary)
+                  &rarr; prompt engineering (proprietary)
+              &rarr; $handleProgressChunk(requestId, ..)  [server &rarr; browser]
+  &rarr; model.acceptResponseProgress()                  [browser]
+  &rarr; UI renders                                      [browser]</div>
+
+<h3>2.2 Our Architecture (what we're building)</h3>
+
+<div class="diagram">
+User types message
+  &rarr; ChatWidget._acceptInput()                     [browser]
+  &rarr; chatService.sendRequest()                      [browser]
+  &rarr; _sendRequestAsync()  (SIMPLIFIED)              [browser]
+      &rarr; model.addRequest()  &mdash; show in UI immediately
+      &rarr; RPC $sendToAssistant(                       [browser &rarr; server]
+            assistantId,
+            message,
+            requestId,
+            attachedContext
+          )
+      &rarr; DevSwarmExtHost receives                    [server]
+          &rarr; forwards to your app's PTY manager
+          &rarr; PTY manager sends to CLI process
+          &rarr; reads streaming JSON from PTY
+          &rarr; normalizes to standard shape
+          &rarr; maps to IChatProgress[] chunks
+          &rarr; $handleProgress(requestId, chunks)       [server &rarr; browser]
+  &rarr; progressCallback fires                          [browser]
+  &rarr; model.acceptResponseProgress()                  [browser]
+  &rarr; UI renders                                      [browser]</div>
+
+<h3>2.3 What We Strip, Keep, and Modify</h3>
+
+<table>
+  <tr><th>Component</th><th>Status</th><th>Why</th></tr>
+  <tr><td>ChatWidget, ChatListWidget, content parts, streaming</td><td><span class="tag tag-keep">Keep</span></td><td>This IS the UI. We consume it as-is.</td></tr>
+  <tr><td>ChatInputPart (input editor)</td><td><span class="tag tag-keep">Keep</span></td><td>Monaco input with @ completions, attachments.</td></tr>
+  <tr><td>@ file search, # symbol search</td><td><span class="tag tag-keep">Keep</span></td><td>Built into the input editor, works for any chat widget.</td></tr>
+  <tr><td>ChatModel, acceptResponseProgress()</td><td><span class="tag tag-keep">Keep</span></td><td>Request/response model, progress updates. Core data flow.</td></tr>
+  <tr><td>IChatService.sendRequest()</td><td><span class="tag tag-modify">Modify</span></td><td>Simplify _sendRequestAsync() to skip agent routing, send directly to our ExtHost service.</td></tr>
+  <tr><td>ChatViewPane</td><td><span class="tag tag-strip">Replace</span></td><td>Replace with our own view pane. Hide the native one at source level.</td></tr>
+  <tr><td>Model picker</td><td><span class="tag tag-strip">Replace</span></td><td>Replace with assistant picker.</td></tr>
+  <tr><td>Mode picker (Ask/Edit/Agent)</td><td><span class="tag tag-strip">Strip</span></td><td>The CLI assistant handles its own modes internally.</td></tr>
+  <tr><td>IChatAgentService, participants, invokeAgent()</td><td><span class="tag tag-strip">Strip</span></td><td>No agents/participants. The CLI IS the agent.</td></tr>
+  <tr><td>Participant detection (@workspace, @terminal routing)</td><td><span class="tag tag-strip">Strip</span></td><td>Copilot-specific routing. No equivalent in CLI assistants.</td></tr>
+  <tr><td>Tool/MCP infrastructure</td><td><span class="tag tag-investigate">Investigate</span></td><td>VS Code's tool system is for VS Code's agent runtime. CLI assistants have their own. Need bridging strategy.</td></tr>
+  <tr><td>Slash commands / skills discovery</td><td><span class="tag tag-investigate">Investigate</span></td><td>Discovery already scans per-CLI directories. Need scoping by active assistant.</td></tr>
+</table>
+
+<h2>3. The Participant Question</h2>
+
+<h3>3.1 What Copilot's Participants Actually Are</h3>
+
+<p>Copilot registers <strong>multiple chat participants</strong> in VS Code, each mapped to an "Intent":</p>
+
+<table>
+  <tr><th>Participant</th><th>Intent</th><th>What It Does</th></tr>
+  <tr><td><code>github.copilot.default</code></td><td>Unknown / AskAgent</td><td>Default handler &mdash; routes to Copilot's LLM</td></tr>
+  <tr><td><code>@workspace</code></td><td>(separate extension)</td><td>Workspace-aware context &mdash; searches codebase, reads files</td></tr>
+  <tr><td><code>@terminal</code></td><td>Terminal</td><td>Terminal-aware &mdash; suggests commands, explains output</td></tr>
+  <tr><td><code>@vscode</code></td><td>VSCode</td><td>VS Code settings/API expert</td></tr>
+  <tr><td>Editing agent</td><td>Edit</td><td>Multi-file editing with diff view</td></tr>
+  <tr><td>Edits agent</td><td>Agent (agentic)</td><td>Full autonomous agent with tool use</td></tr>
+  <tr><td>Notebook agents</td><td>Editor / notebookEditor</td><td>Notebook-specific editing</td></tr>
+</table>
+
+<p>These are <strong>Copilot-specific routing categories</strong>. Each one calls the same Copilot LLM backend with different system prompts and context strategies. They're how Copilot decides whether to search your codebase, suggest a terminal command, or edit files.</p>
+
+<h3>3.2 Do CLI Assistants Have Equivalents?</h3>
+
+<div class="card card-orange">
+  <p><strong>No.</strong> CLI coding assistants don't have "participants." They're single-process agents that handle everything internally:</p>
+  <ul>
+    <li><strong>Claude Code</strong> &mdash; One process. It decides when to read files, run commands, edit code. No @workspace/@terminal split. Has its own tool system (Read, Edit, Bash, etc.), its own MCP client, its own permission model.</li>
+    <li><strong>Codex CLI</strong> &mdash; One process. Has its own tool execution, sandboxing, approval flow.</li>
+    <li><strong>Copilot CLI</strong> (<code>gh copilot</code>) &mdash; Simple explain/suggest. No agentic behavior, no @-mentions.</li>
+  </ul>
+  <p>The CLI IS the @workspace + @terminal + @vscode + editing agent rolled into one. It doesn't need routing because there's nothing to route between.</p>
+</div>
+
+<h3>3.3 What This Means for Us</h3>
+
+<p>We <strong>do not need to replicate the participant system</strong>. We don't need to forward participant info to the CLI. When the user types a message, it goes straight to the CLI process. The CLI decides internally what to do &mdash; read files, run terminal commands, edit code.</p>
+
+<p>The only thing we might lose is the ability to type <code>@workspace</code> or <code>@terminal</code> to explicitly scope a query. But CLI assistants handle this via natural language ("search my codebase for X", "run this command") rather than @-mention routing.</p>
+
+<h2>4. The Data Flow in Detail</h2>
+
+<h3>4.1 Browser &harr; Server Transport</h3>
+
+<div class="diagram">
+BROWSER (per tab)                         SERVER (shared)
+&boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;         &boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
+&boxv; ChatWidget                          &boxv;         &boxv; DevSwarmExtHost                   &boxv;
+&boxv;   &boxv;                                &boxv;         &boxv;   &boxv;                                &boxv;
+&boxv;   &boxvr;&rarr; sendRequest()                  &boxv;         &boxv;   &boxvr;&rarr; $sendToAssistant()            &boxv;
+&boxv;   &boxv;    &boxvr;&rarr; model.addRequest()       &boxv;         &boxv;   &boxv;    &boxvr;&rarr; ptyManager.send()          &boxv;
+&boxv;   &boxv;    &boxur;&rarr; proxy.$sendToAssistant() &boxh;&boxh;&boxh;RPC&boxh;&boxh;&boxh;&rarr;   &boxv;    &boxvr;&rarr; reads PTY stream           &boxv;
+&boxv;   &boxv;                                &boxv;         &boxv;   &boxv;    &boxvr;&rarr; normalizes JSON            &boxv;
+&boxv;   &boxv;  progressCallback(chunks)   &larr;&boxh;&boxh;&boxh;RPC&boxh;&boxh;&boxh;   &boxv;    &boxur;&rarr; $handleProgress(reqId, ..) &boxv;
+&boxv;   &boxv;    &boxvr;&rarr; model.acceptResponse()   &boxv;         &boxv;                                   &boxv;
+&boxv;   &boxv;    &boxur;&rarr; UI re-renders            &boxv;         &boxv; PTY Manager (your existing app)    &boxv;
+&boxv;   &boxv;                                &boxv;         &boxv;   &boxvr;&rarr; spawns claude / codex / etc. &boxv;
+&boxv;   &boxur;&rarr; _pendingProgress[requestId]  &boxv;         &boxv;   &boxur;&rarr; streams JSON from stdout     &boxv;
+&boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr;         &boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr;
+
+Multi-window routing: each tab has its own _pendingProgress map.
+RPC is scoped per WebSocket connection. requestId keys everything.</div>
+
+<h3>4.2 Progress Chunk Translation</h3>
+
+<p>Your app already normalizes CLI output to a standard shape. The final step maps that shape to <code>IChatProgress</code> kinds:</p>
+
+<table>
+  <tr><th>Your Standard Shape</th><th>IChatProgress Kind</th><th>UI Result</th></tr>
+  <tr><td>Text / markdown output</td><td><code>{ kind: 'markdownContent', content: { value: '...' } }</code></td><td>Rich markdown with Monaco code blocks</td></tr>
+  <tr><td>Thinking / reasoning</td><td><code>{ kind: 'thinkingProgress', ... }</code></td><td>Collapsible thinking block with shimmer</td></tr>
+  <tr><td>Tool call started</td><td><code>{ kind: 'beginToolInvocation', toolCallId, toolName }</code></td><td>Tool progress spinner in UI</td></tr>
+  <tr><td>Tool call result</td><td><code>{ kind: 'toolResult', ... }</code></td><td>Tool output display</td></tr>
+  <tr><td>File edit / diff</td><td><code>{ kind: 'textEditGroup', uri, edits }</code></td><td>Inline diff view (Monaco diff editor)</td></tr>
+  <tr><td>Progress status</td><td><code>{ kind: 'progressMessage', content: '...' }</code></td><td>Animated spinner with status text</td></tr>
+  <tr><td>Error</td><td><code>{ kind: 'errorMessage', ... }</code></td><td>Error display in chat</td></tr>
+  <tr><td>File reference</td><td><code>{ kind: 'reference', reference: uri }</code></td><td>Clickable file reference pill</td></tr>
+</table>
+
+<h2>5. What Happens to sendRequest()</h2>
+
+<h3>5.1 Current _sendRequestAsync() (simplified)</h3>
+
+<pre><code>private _sendRequestAsync(model, sessionResource, parsedRequest, ...) {
+  const progressCallback = (progress: IChatProgress[]) => {
+    model.acceptResponseProgress(request, progressItem);   // &larr; KEEP THIS
+  };
+
+  // --- STRIP ALL OF THIS ---
+  const agentPart = parsedRequest.parts.find(...);           // agent detection
+  const commandPart = parsedRequest.parts.find(...);         // command detection
+  await this.chatAgentService.detectAgentOrCommand(...);     // participant detection
+  await this.extensionService.activateByEvent(...);          // agent activation
+  const history = this.getHistoryEntriesFromModel(...);      // history for agent
+  const agentResult = await this.chatAgentService.invokeAgent(  // THE COPILOT CALL
+    agent.id, requestProps, progressCallback, history, token
+  );
+  // --- END STRIP ---
+
+  // --- REPLACE WITH ---
+  const agentResult = await this.devswarmService.sendToAssistant(
+    selectedAssistantId, requestProps, progressCallback, token
+  );
+}</code></pre>
+
+<h3>5.2 The RPC Boundary</h3>
+
+<div class="card card-accent">
+  <p><strong>Why we can't skip the RPC hop:</strong> <code>sendRequest()</code> runs in the browser. The PTY runs on the server. The extension host / DevSwarm ExtHost service is the bridge. We need a MainThread/ExtHost service pair, but it's far simpler than the agent protocol:</p>
+  <ul>
+    <li><strong>MainThread &rarr; ExtHost:</strong> <code>$sendToAssistant(assistantId, message, requestId, context)</code></li>
+    <li><strong>ExtHost &rarr; MainThread:</strong> <code>$handleProgress(requestId, IChatProgress[])</code></li>
+    <li><strong>MainThread &rarr; ExtHost:</strong> <code>$cancelRequest(requestId)</code></li>
+  </ul>
+  <p>That's the entire protocol. Three methods. No agent resolution, no participant detection, no model lookup.</p>
+</div>
+
+<h2>6. The Assistant Picker</h2>
+
+<div class="diagram">
+&boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
+&boxv;   &boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul; &boxv;
+&boxv;   &boxv;  Installed                    &boxv; &boxv;
+&boxv;   &boxv;                               &boxv; &boxv;
+&boxv;   &boxv;  &check; [&gt;_] Claude Code            &boxv; &boxv;
+&boxv;   &boxv;    [&gt;_] GitHub Copilot          &boxv; &boxv;
+&boxv;   &boxv;                               &boxv; &boxv;
+&boxv;   &boxv;  Available                    &boxv; &boxv;
+&boxv;   &boxv;                               &boxv; &boxv;
+&boxv;   &boxv;    [&gt;_] Codex      [Install]   &boxv; &boxv;
+&boxv;   &boxv;    [&gt;_] Gemini CLI [Install]   &boxv; &boxv;
+&boxv;   &boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr; &boxv;
+&boxv;                                     &boxv;
+&boxv;  [Claude Code &darr;] [Attach] [Send]   &boxv;
+&boxv;  &boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul; &boxv;
+&boxv;  &boxv; Type your message...          &boxv; &boxv;
+&boxv;  &boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr; &boxv;
+&boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr;</div>
+
+<p>Replaces: model picker, mode picker (Ask/Edit/Agent). One choice, one process.</p>
+<p>Defined via: extension contribution point (<code>contributes.chatAssistants</code> in <code>package.json</code>).</p>
+<p>Selection stored in: <code>IStorageService</code> (workspace scope), persists across sessions.</p>
+
+<h2>7. Slash Commands &amp; Skills Discovery</h2>
+
+<h3>7.1 What Already Exists</h3>
+
+<p>VS Code's <code>IPromptsService</code> already scans per-CLI directories:</p>
+
+<table>
+  <tr><th>Type</th><th>Claude Code Paths</th><th>Copilot Paths</th><th>Generic Paths</th></tr>
+  <tr><td>Skills</td><td><code>.claude/skills/</code>, <code>~/.claude/skills/</code></td><td><code>~/.copilot/skills/</code></td><td><code>.agents/skills/</code>, <code>.github/skills/</code></td></tr>
+  <tr><td>Agents</td><td><code>.claude/agents/</code>, <code>~/.claude/agents/</code></td><td><code>~/.copilot/agents/</code></td><td><code>.github/agents/</code></td></tr>
+  <tr><td>Instructions</td><td><code>.claude/rules/</code>, <code>~/.claude/rules/</code></td><td><code>~/.copilot/instructions/</code></td><td><code>.github/instructions/</code></td></tr>
+  <tr><td>Hooks</td><td><code>.claude/settings.json</code></td><td><code>~/.copilot/hooks/</code></td><td><code>.github/hooks/</code></td></tr>
+  <tr><td>Instructions file</td><td><code>CLAUDE.md</code>, <code>.claude/CLAUDE.md</code></td><td><code>.github/copilot-instructions.md</code></td><td><code>AGENTS.md</code></td></tr>
+</table>
+
+<p>Each result is tagged with a <code>PromptFileSource</code> (e.g., <code>ClaudeWorkspace</code>, <code>CopilotPersonal</code>, <code>GitHubWorkspace</code>).</p>
+
+<h3>7.2 What's Missing</h3>
+
+<div class="card card-yellow">
+  <p><strong>Problem:</strong> The discovery merges everything together. There's no concept of "show only Claude's skills when Claude Code is selected." The <code>PromptFileSource</code> tags exist but nothing filters by active assistant.</p>
+  <p><strong>Solution:</strong> Add filtering in the completion providers and skill lists. When the assistant picker says "Claude Code," filter discovery results to <code>ClaudeWorkspace</code> / <code>ClaudePersonal</code> sources. When it says "Codex," filter to Codex sources (after adding Codex paths to the discovery arrays).</p>
+  <p><strong>For CLIs with non-<code>.prompt.md</code> formats:</strong> Build adapters that read the CLI's native config and present commands as discoverable items.</p>
+</div>
+
+<h3>7.3 Slash Commands vs. CLI Commands</h3>
+
+<div class="card card-orange">
+  <p><strong>Important distinction:</strong> VS Code's slash commands (<code>/fix</code>, <code>/explain</code>, <code>/tests</code>) are Copilot's participant subcommands. They route to different intents within Copilot's LLM call. They are NOT the CLI's own commands.</p>
+  <p>Claude Code has its own <code>/commands</code> (from <code>.claude/commands/</code>). Codex may have its own. These are different systems.</p>
+  <p><strong>Options:</strong></p>
+  <ul>
+    <li>Query each CLI for its commands at startup and register them dynamically</li>
+    <li>Read the CLI's command directory and present as slash commands</li>
+    <li>Forward the raw <code>/command</code> text to the CLI and let it handle parsing</li>
+  </ul>
+</div>
+
+<h2>8. Tool/MCP: Two Separate Worlds</h2>
+
+<div class="diagram">
+VS Code's World                          CLI Assistant's World
+&boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;   &boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
+&boxv; ILanguageModelToolsService        &boxv;   &boxv; Claude Code's internal tools      &boxv;
+&boxv;  - EditTool, ReadTool, etc.       &boxv;   &boxv;  - Read, Edit, Bash, Search, etc. &boxv;
+&boxv;  - vscode.lm.tools API            &boxv;   &boxv;  - its own tool execution engine   &boxv;
+&boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr;   &boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr;
+
+&boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;   &boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
+&boxv; MCP servers via settings.json     &boxv;   &boxv; Claude's MCP via                  &boxv;
+&boxv;  - auto-discovered from Claude    &boxv;   &boxv;   ~/.claude/settings.json          &boxv;
+&boxv;    Desktop, Cursor, Windsurf      &boxv;   &boxv;  - its own MCP client              &boxv;
+&boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr;   &boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr;
+
+&boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;   &boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
+&boxv; .prompt.md skills                 &boxv;   &boxv; Claude's /commands from            &boxv;
+&boxv;  - .github/skills/                &boxv;   &boxv;   .claude/commands/                &boxv;
+&boxv;  - .claude/skills/                &boxv;   &boxv;  - its own slash command system     &boxv;
+&boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr;   &boxdl;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdr;
+
+These are PARALLEL systems. They don't talk to each other.
+The CLI manages its own tools/MCP/commands internally.
+VS Code's system was built for Copilot's architecture where VS Code is the agent runtime.</div>
+
+<p><strong>Our role:</strong> We're not bridging these systems. The CLI runs independently. What we CAN do:</p>
+<ul>
+  <li><strong>Surface the CLI's tool activity</strong> in the UI via <code>beginToolInvocation</code> progress chunks (read-only visibility)</li>
+  <li><strong>Share MCP configs</strong> between VS Code and the CLI (read the CLI's config, or write VS Code's MCP to the CLI's config)</li>
+  <li><strong>Surface the CLI's commands</strong> as slash commands in the input (discovery bridge)</li>
+</ul>
+
+<h2>9. Open Investigation Items</h2>
+
+<table>
+  <tr><th>Question</th><th>Status</th><th>Impact</th></tr>
+  <tr><td>How to bridge each CLI's native slash commands into VS Code's slash command system?</td><td><span class="status-tbd">TBD</span></td><td>Determines whether <code>/</code> completions show CLI-native commands</td></tr>
+  <tr><td>Should we share MCP configs between VS Code and CLIs, or let each manage its own?</td><td><span class="status-tbd">TBD</span></td><td>Affects MCP management UI &mdash; one panel or per-assistant</td></tr>
+  <tr><td>How to surface CLI tool calls (Read, Edit, Bash) in the chat UI?</td><td><span class="status-tbd">TBD</span></td><td>Determines whether users see tool activity or just final output</td></tr>
+  <tr><td>What's each CLI's streaming JSON format? How does our standard shape map to IChatProgress?</td><td><span class="status-tbd">TBD</span></td><td>Core translation layer &mdash; needs per-CLI investigation</td></tr>
+  <tr><td>How to handle CLI permissions/approvals in the VS Code UI?</td><td><span class="status-tbd">TBD</span></td><td>Claude Code has its own permission system. Do we proxy it through the chat UI?</td></tr>
+  <tr><td>How to handle context attachments (@ references) &mdash; pass file contents to CLI stdin?</td><td><span class="status-tbd">TBD</span></td><td>Determines whether @file references actually reach the CLI</td></tr>
+  <tr><td>Discovery paths for Codex, Gemini CLI, etc. &mdash; what are their config locations?</td><td><span class="status-tbd">TBD</span></td><td>Needed for skill/command discovery per assistant</td></tr>
+  <tr><td>How to scope prompt file discovery (<code>.prompt.md</code>) by active assistant?</td><td><span class="status-partial">Partial</span></td><td><code>PromptFileSource</code> tags exist but filtering doesn't</td></tr>
+</table>
+
+<h2>10. Implementation Phases</h2>
+
+<h3>Phase 1: Core Pipeline (MVP)</h3>
+<div class="card card-green">
+  <ol>
+    <li>Create <code>DevSwarmChatViewPane</code> &mdash; our own view pane wrapping <code>ChatWidget</code></li>
+    <li>Hide native <code>ChatViewPane</code> at source level (change <code>ctorDescriptor</code> in <code>chatParticipant.contribution.ts:70</code>)</li>
+    <li>Strip mode/model pickers from the input toolbar</li>
+    <li>Add assistant picker (extension contribution point)</li>
+    <li>Create DevSwarm MainThread/ExtHost service pair (3 methods: send, progress, cancel)</li>
+    <li>Simplify <code>_sendRequestAsync()</code> to use DevSwarm service instead of agent pipeline</li>
+    <li>Wire PTY manager output &rarr; IChatProgress translation &rarr; progressCallback</li>
+  </ol>
+</div>
+
+<h3>Phase 2: Discovery &amp; Commands</h3>
+<div class="card card-accent">
+  <ol>
+    <li>Add filtering to prompt file discovery by active assistant (use <code>PromptFileSource</code> tags)</li>
+    <li>Bridge CLI native commands to slash command completions</li>
+    <li>Surface CLI tool activity as <code>beginToolInvocation</code> progress in the chat UI</li>
+    <li>Handle context attachments &mdash; pass @file contents to CLI</li>
+  </ol>
+</div>
+
+<h3>Phase 3: MCP &amp; Tool Management</h3>
+<div class="card card-yellow">
+  <ol>
+    <li>Build per-assistant MCP config management UI</li>
+    <li>Optional: share MCP configs between VS Code and CLI assistants</li>
+    <li>Surface assistant-specific settings/permissions in the chat</li>
+    <li>Handle CLI approval/permission prompts in the VS Code UI</li>
+  </ol>
+</div>
+
+<h3>Phase 4: DevSwarm Extension API (<code>vscode.devswarm</code>)</h3>
+<div class="card card-orange">
+  <ol>
+    <li>Formalize the assistant lifecycle hooks as a public API namespace</li>
+    <li><code>devswarm.assistants</code> &mdash; register providers, query installed, trigger install</li>
+    <li><code>devswarm.terminals</code> &mdash; provision CLI terminals, stream I/O</li>
+    <li>Our extension becomes the first consumer, but other extensions can use the same hooks</li>
+  </ol>
+</div>
+
+<h2>11. Merge Conflict Surface</h2>
+
+<table>
+  <tr><th>File</th><th>Change Type</th><th>Conflict Risk</th></tr>
+  <tr><td><code>chatParticipant.contribution.ts:70</code></td><td>Change <code>ctorDescriptor</code> to our ViewPane</td><td style="color: var(--green);">Low &mdash; one line</td></tr>
+  <tr><td><code>chatServiceImpl.ts</code> (<code>_sendRequestAsync</code>)</td><td>Replace agent invocation body</td><td style="color: var(--yellow);">Medium &mdash; one method body, but upstream may refactor it</td></tr>
+  <tr><td><code>chatInputPart.ts</code></td><td>Remove model/mode picker, add assistant picker</td><td style="color: var(--yellow);">Medium &mdash; touches the toolbar setup section</td></tr>
+  <tr><td><code>extHost.protocol.ts</code></td><td>Add DevSwarm RPC protocol methods</td><td style="color: var(--green);">Low &mdash; additive, new identifiers</td></tr>
+  <tr><td><code>promptFileLocations.ts</code></td><td>Add discovery paths for new CLIs</td><td style="color: var(--green);">Low &mdash; additive to existing arrays</td></tr>
+  <tr><td>New files (ViewPane, service, picker, ExtHost)</td><td>New files</td><td style="color: var(--green);">None &mdash; new files never conflict</td></tr>
+</table>
+
+<hr>
+<p style="text-align: center; color: var(--text-muted); font-size: 0.9em;">DevSwarm Chat Architecture v2 &middot; DRAFT &middot; May 2026<br>Investigation ongoing &mdash; see Section 9 for open items</p>
+
+</body>
+</html>
