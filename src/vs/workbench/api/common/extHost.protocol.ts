@@ -3929,6 +3929,7 @@ export const MainContext = {
 	MainThreadChatContext: createProxyIdentifier<MainThreadChatContextShape>('MainThreadChatContext'),
 	MainThreadChatDebug: createProxyIdentifier<MainThreadChatDebugShape>('MainThreadChatDebug'),
 	MainThreadBrowsers: createProxyIdentifier<MainThreadBrowsersShape>('MainThreadBrowsers'),
+	MainThreadDevSwarm: createProxyIdentifier<MainThreadDevSwarmShape>('MainThreadDevSwarm'),
 };
 
 export const ExtHostContext = {
@@ -4010,4 +4011,30 @@ export const ExtHostContext = {
 	ExtHostChatSessions: createProxyIdentifier<ExtHostChatSessionsShape>('ExtHostChatSessions'),
 	ExtHostGitExtension: createProxyIdentifier<ExtHostGitExtensionShape>('ExtHostGitExtension'),
 	ExtHostBrowsers: createProxyIdentifier<ExtHostBrowsersShape>('ExtHostBrowsers'),
+	ExtHostDevSwarm: createProxyIdentifier<ExtHostDevSwarmShape>('ExtHostDevSwarm'),
 };
+
+// --- DevSwarm Chat Pipeline ---
+
+export interface IDevSwarmRequestContext {
+	attachedContext?: unknown[];
+	sessionResource?: URI;
+}
+
+export interface IDevSwarmResult {
+	errorDetails?: { message: string };
+}
+
+export interface MainThreadDevSwarmShape extends IDisposable {
+	$handleProgress(requestId: string, chunks: IChatProgressDto[]): void;
+}
+
+export interface ExtHostDevSwarmShape {
+	$sendToAssistant(
+		assistantId: string,
+		message: string,
+		requestId: string,
+		context: IDevSwarmRequestContext,
+	): Promise<IDevSwarmResult>;
+	$cancelRequest(requestId: string): void;
+}
