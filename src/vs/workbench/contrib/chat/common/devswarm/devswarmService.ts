@@ -47,6 +47,16 @@ export class DevSwarmService implements IDevSwarmService {
 		console.log('[DEVSWARM-CHAT] DevSwarmService instantiated');
 		ChatContextKeys.enabled.bindTo(contextKeyService).set(true);
 		ChatContextKeys.panelParticipantRegistered.bindTo(contextKeyService).set(true);
+
+		this._installedAssistants = [
+			{ id: 'copilot', name: 'Copilot', installed: true },
+			{ id: 'claude', name: 'Claude Code', installed: true },
+		];
+		this._availableAssistants = [
+			{ id: 'gemini', name: 'Gemini', installed: false },
+			{ id: 'opencode', name: 'OpenCode', installed: false },
+		];
+		this._activeAssistantId = 'copilot';
 	}
 
 	private _activeAssistantId: string | undefined;
