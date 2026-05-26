@@ -389,7 +389,8 @@ export class WebClientServer {
 			productConfiguration,
 			callbackRoute: callbackRoute,
 			configurationDefaults: {
-				'workbench.secondarySideBar.defaultVisibility': 'hidden'
+				'workbench.secondarySideBar.defaultVisibility': 'visible',
+				'chat.disableAIFeatures': false
 			}
 		};
 
