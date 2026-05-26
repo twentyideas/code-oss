@@ -351,12 +351,13 @@ export class ChatEntitlementService extends Disposable implements IChatEntitleme
 		this.sentimentObs = observableFromEvent(this.onDidChangeSentiment, () => this.sentiment);
 
 		if ((isWeb && !environmentService.remoteAuthority && !environmentService.isSessionsWindow)) {
-			ChatEntitlementContextKeys.Setup.hidden.bindTo(this.contextKeyService).set(true); // hide copilot UI on web if unsupported
-			return;
+			// DevSwarm: don't hide chat on web — we use it for our CLI assistant pipeline
+			// Original: ChatEntitlementContextKeys.Setup.hidden.bindTo(this.contextKeyService).set(true);
 		}
 
 		if (!productService.defaultChatAgent) {
-			return; // we need a default chat agent configured going forward from here
+			// DevSwarm: continue even without defaultChatAgent — we provide our own assistants
+			// Original: return;
 		}
 
 		const context = this.context = new Lazy(() => this._register(instantiationService.createInstance(ChatEntitlementContext)));
