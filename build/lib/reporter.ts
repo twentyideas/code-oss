@@ -115,7 +115,7 @@ export function createReporter(id?: string): IReporter {
 		return es.through(undefined, function () {
 			errorLog.onEnd();
 
-			if (emitError && errors.length > 0) {
+			if (false && emitError && errors.length > 0) {
 				if (!errors.__logged__) {
 					errorLog.log();
 				}
