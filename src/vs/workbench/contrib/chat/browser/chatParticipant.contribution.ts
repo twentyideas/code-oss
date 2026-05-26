@@ -43,7 +43,7 @@ const chatViewContainer: ViewContainer = Registry.as<IViewContainersRegistry>(Vi
 	icon: chatViewIcon,
 	ctorDescriptor: new SyncDescriptor(ViewPaneContainer, [ChatViewContainerId, { mergeViewWithContainerWhenSingleView: true }]),
 	storageId: ChatViewContainerId,
-	hideIfEmpty: true,
+	hideIfEmpty: false, // DevSwarm: always show chat container
 	order: 1,
 }, ViewContainerLocation.AuxiliaryBar, { isDefault: true, doNotRegisterOpenCommand: true });
 
