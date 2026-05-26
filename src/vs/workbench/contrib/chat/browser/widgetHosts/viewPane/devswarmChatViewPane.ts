@@ -29,9 +29,15 @@ import { IActivityService } from '../../../../../services/activity/common/activi
 import { IWorkbenchEnvironmentService } from '../../../../../services/environment/common/environmentService.js';
 import { IHostService } from '../../../../../services/host/browser/host.js';
 import { IViewPaneOptions } from '../../../../../browser/parts/views/viewPane.js';
+import { ChatWidget } from '../../widget/chatWidget.js';
+import { DevSwarmChatWidget } from '../../widget/devswarmChatWidget.js';
 import { ChatViewPane } from './chatViewPane.js';
 
 export class DevSwarmChatViewPane extends ChatViewPane {
+
+	protected override getChatWidgetCtor(): typeof ChatWidget {
+		return DevSwarmChatWidget;
+	}
 
 	constructor(
 		options: IViewPaneOptions,

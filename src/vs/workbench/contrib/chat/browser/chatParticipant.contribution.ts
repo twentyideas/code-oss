@@ -31,7 +31,7 @@ import { ChatContextKeys } from '../common/actions/chatContextKeys.js';
 import { IRawChatParticipantContribution } from '../common/participants/chatParticipantContribTypes.js';
 import { ChatAgentLocation, ChatModeKind } from '../common/constants.js';
 import { ChatViewId, ChatViewContainerId } from './chat.js';
-import { ChatViewPane } from './widgetHosts/viewPane/chatViewPane.js';
+import { DevSwarmChatViewPane } from './widgetHosts/viewPane/devswarmChatViewPane.js';
 
 // --- Chat Container &  View Registration
 
@@ -67,7 +67,7 @@ const chatViewDescriptor: IViewDescriptor = {
 		},
 		order: 1
 	},
-	ctorDescriptor: new SyncDescriptor(ChatViewPane),
+	ctorDescriptor: new SyncDescriptor(DevSwarmChatViewPane),
 	// DevSwarm: always show the chat panel (no Copilot entitlement gate)
 	// Original when clause required panelParticipantRegistered or Setup.hidden.negate()
 };

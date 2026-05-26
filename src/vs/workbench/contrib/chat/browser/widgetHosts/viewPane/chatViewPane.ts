@@ -515,12 +515,16 @@ export class ChatViewPane extends ViewPane implements IViewWelcomeDelegate {
 
 	private static readonly MIN_CHAT_WIDGET_HEIGHT = 116;
 
-	private _widget!: ChatWidget;
+	protected _widget!: ChatWidget;
 	get widget(): ChatWidget { return this._widget; }
 
 	private titleControl: ChatViewTitleControl | undefined;
 
-	private createChatControl(parent: HTMLElement): ChatWidget {
+	protected getChatWidgetCtor(): typeof ChatWidget {
+		return ChatWidget;
+	}
+
+	protected createChatControl(parent: HTMLElement): ChatWidget {
 		const chatControlsContainer = append(parent, $('.chat-controls-container'));
 
 		const locationBasedColors = this.getLocationBasedColors();
@@ -536,7 +540,7 @@ export class ChatViewPane extends ViewPane implements IViewWelcomeDelegate {
 		// Chat Widget
 		const scopedInstantiationService = this._register(this.instantiationService.createChild(new ServiceCollection([IContextKeyService, this.scopedContextKeyService])));
 		this._widget = this._register(scopedInstantiationService.createInstance(
-			ChatWidget,
+			this.getChatWidgetCtor(),
 			ChatAgentLocation.Chat,
 			{ viewId: this.id },
 			{

@@ -191,13 +191,13 @@ export class AssistantPickerWidget extends Disposable {
 			return;
 		}
 
-		const assistantLabel = this._selectedAssistant?.name ?? localize('assistantPicker.select', "Assistant");
+		const assistantLabel = this._selectedAssistant?.name ?? localize('assistantPicker.select', "Harness");
 		const domChildren: (HTMLElement | string)[] = [];
 		domChildren.push(dom.$('span.chat-input-picker-label', undefined, assistantLabel));
 		domChildren.push(...renderLabelWithIcons(`$(chevron-down)`));
 
 		dom.reset(this._domNode, ...domChildren);
 
-		this._domNode.ariaLabel = localize('assistantPicker.ariaLabel', "Select Coding Assistant, {0}", assistantLabel);
+		this._domNode.ariaLabel = localize('assistantPicker.ariaLabel', "Select Coding Harness, {0}", assistantLabel);
 	}
 }
