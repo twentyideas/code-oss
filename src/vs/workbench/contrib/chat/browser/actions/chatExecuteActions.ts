@@ -454,6 +454,7 @@ export class OpenPermissionPickerAction extends Action2 {
 				group: 'navigation',
 				when:
 					ContextKeyExpr.and(
+						ChatContextKeys.devswarmChatActive.negate(),
 						ChatContextKeys.enabled,
 						ChatContextKeys.location.isEqualTo(ChatAgentLocation.Chat),
 						ChatContextKeys.chatModeKind.notEqualsTo(ChatModeKind.Ask),
@@ -1229,7 +1230,6 @@ export function registerChatExecuteActions(): DisposableStore {
 	store.add(registerAction2(OpenSessionTargetPickerAction));
 	store.add(registerAction2(OpenDelegationPickerAction));
 	store.add(registerAction2(OpenWorkspacePickerAction));
-	store.add(registerAction2(OpenAssistantPickerAction));
 	store.add(registerAction2(ChatSessionPrimaryPickerAction));
 	store.add(registerAction2(ChangeChatModelAction));
 	store.add(registerAction2(CancelEdit));

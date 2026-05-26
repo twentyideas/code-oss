@@ -274,7 +274,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 
 	private recentlyRestoredCheckpoint: boolean = false;
 
-	private welcomeMessageContainer!: HTMLElement;
+	protected welcomeMessageContainer!: HTMLElement;
 	private readonly welcomePart: MutableDisposable<ChatViewWelcomePart> = this._register(new MutableDisposable());
 
 	private readonly _gettingStartedTipPart = this._register(new MutableDisposable<DisposableStore>());
@@ -395,7 +395,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@IChatService private readonly chatService: IChatService,
 		@IChatAgentService private readonly chatAgentService: IChatAgentService,
 		@IChatWidgetService private readonly chatWidgetService: IChatWidgetService,
@@ -1033,7 +1033,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 	/**
 	 * Renders the welcome view content when needed.
 	 */
-	private renderWelcomeViewContentIfNeeded() {
+	protected renderWelcomeViewContentIfNeeded() {
 		if (this._isRenderingWelcome) {
 			return;
 		}

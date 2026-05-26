@@ -3,11 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Emitter, Event } from '../../../../../base/common/event.js';
+import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+import { CommandsRegistry, ICommandService } from '../../../../../platform/commands/common/commands.js';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { IDevSwarmRequestContext, IDevSwarmResult } from '../../../../api/common/extHost.protocol.js';
 import { IChatProgress } from '../chatService/chatService.js';
 import { IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { ChatContextKeys } from '../actions/chatContextKeys.js';
+
+export const enum DevSwarmSessionState {
+	None = 'none',
+	Starting = 'starting',
+	Active = 'active',
+}
 
 export interface IDevSwarmAssistantMetadata {
 	id: string;
@@ -21,9 +31,13 @@ export const IDevSwarmService = createDecorator<IDevSwarmService>('devswarmServi
 
 export interface IDevSwarmService {
 	readonly _serviceBrand: undefined;
+	readonly sessionState: DevSwarmSessionState;
+	readonly onDidChangeSessionState: Event<DevSwarmSessionState>;
 	hasActiveAssistant(): boolean;
 	get activeAssistantId(): string | undefined;
 	setActiveAssistant(assistantId: string | undefined): void;
+	startSession(agentId: string): void;
+	endSession(): void;
 	getInstalledAssistants(): IDevSwarmAssistantMetadata[];
 	getAvailableAssistants(): IDevSwarmAssistantMetadata[];
 	registerProgressCallback(requestId: string, callback: (chunks: IChatProgress[]) => void): void;
@@ -37,16 +51,40 @@ export interface IDevSwarmService {
 	): Promise<IDevSwarmResult>;
 }
 
-export class DevSwarmService implements IDevSwarmService {
+export class DevSwarmService extends Disposable implements IDevSwarmService {
 
 	declare readonly _serviceBrand: undefined;
 
+	private _sessionState: DevSwarmSessionState = DevSwarmSessionState.None;
+	private readonly _onDidChangeSessionState = this._register(new Emitter<DevSwarmSessionState>());
+	readonly onDidChangeSessionState: Event<DevSwarmSessionState> = this._onDidChangeSessionState.event;
+
+	get sessionState(): DevSwarmSessionState {
+		return this._sessionState;
+	}
+
 	constructor(
 		@IContextKeyService contextKeyService: IContextKeyService,
+		@ICommandService private readonly _commandService: ICommandService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
+		super();
 		ChatContextKeys.enabled.bindTo(contextKeyService).set(true);
 		ChatContextKeys.panelParticipantRegistered.bindTo(contextKeyService).set(true);
 		ChatContextKeys.devswarmChatActive.bindTo(contextKeyService).set(true);
+
+		configurationService.updateValue('chat.tips.enabled', false);
+
+		this._register(CommandsRegistry.registerCommand('devswarm.chat.sessionStarted', () => {
+			this._setSessionState(DevSwarmSessionState.Active);
+		}));
+	}
+
+	private _setSessionState(state: DevSwarmSessionState): void {
+		if (this._sessionState !== state) {
+			this._sessionState = state;
+			this._onDidChangeSessionState.fire(state);
+		}
 	}
 
 	private _activeAssistantId: string | undefined;
@@ -65,11 +103,24 @@ export class DevSwarmService implements IDevSwarmService {
 	}
 
 	hasActiveAssistant(): boolean {
-		return this._activeAssistantId !== undefined;
+		return this._sessionState === DevSwarmSessionState.Active;
 	}
 
 	setActiveAssistant(assistantId: string | undefined): void {
 		this._activeAssistantId = assistantId;
+	}
+
+	startSession(agentId: string): void {
+		if (this._sessionState !== DevSwarmSessionState.None) {
+			return;
+		}
+		this._setSessionState(DevSwarmSessionState.Starting);
+		this._commandService.executeCommand('devswarm.chat.startSession', agentId);
+	}
+
+	endSession(): void {
+		this._activeAssistantId = undefined;
+		this._setSessionState(DevSwarmSessionState.None);
 	}
 
 	getInstalledAssistants(): IDevSwarmAssistantMetadata[] {

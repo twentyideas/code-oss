@@ -1,0 +1,46 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Twenty Ideas, Inc. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.devswarm-welcome {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	flex: 1;
+	padding: 24px 12px;
+	gap: 16px;
+}
+
+.devswarm-welcome-icon {
+	width: 72px;
+	height: 72px;
+}
+
+.devswarm-welcome-icon.custom-icon {
+	mask-size: 72px !important;
+	-webkit-mask-size: 72px !important;
+	background-color: var(--vscode-icon-foreground);
+}
+
+.devswarm-welcome-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+	text-align: center;
+}
+
+.devswarm-welcome .monaco-button {
+	min-width: 160px;
+	padding: 6px 14px;
+}
+
+.devswarm-welcome-loading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 13px;
+}
+

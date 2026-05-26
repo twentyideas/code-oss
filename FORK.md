@@ -95,3 +95,18 @@ This is additive, so conflicts are unlikely unless upstream restructures the opt
 **Details:** Appends `'setEditorVisible'` to the `Set` passed to `computeNewFileContents()`. The mangler will log a warning instead of erroring.
 
 **Action on merge:** If the `computeNewFileContents` call changes, ensure `'setEditorVisible'` remains in the Set. Can be removed if upstream adds `protected` to the override in `chatDebugEditor.ts`.
+
+### `src/vs/workbench/contrib/chat/browser/widget/chatWidget.ts`
+
+**Change: Promote `welcomeMessageContainer`, `instantiationService`, and `renderWelcomeViewContentIfNeeded` from private to protected**
+
+**Purpose:** Allow `DevSwarmChatWidget` (our subclass) to override the welcome view rendering for session-first UX — showing a custom agent-picker welcome part and controlling input visibility based on session state.
+
+**Details:** Three visibility changes:
+- `private welcomeMessageContainer` → `protected welcomeMessageContainer` (line ~277)
+- `@IInstantiationService private readonly instantiationService` → `protected readonly` (line ~398)
+- `private renderWelcomeViewContentIfNeeded()` → `protected renderWelcomeViewContentIfNeeded()` (line ~1036)
+
+No logic changes. The subclass `DevSwarmChatWidget` overrides `renderWelcomeViewContentIfNeeded()` to render a `DevSwarmWelcomePart` instead of the stock `ChatViewWelcomePart`.
+
+**Action on merge:** Re-apply the `protected` modifiers if upstream modifies these declarations.
