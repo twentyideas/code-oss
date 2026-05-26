@@ -350,15 +350,6 @@ export class ChatEntitlementService extends Disposable implements IChatEntitleme
 		);
 		this.sentimentObs = observableFromEvent(this.onDidChangeSentiment, () => this.sentiment);
 
-		console.log('[DEVSWARM-CHAT] ChatEntitlementService init: isWeb=', isWeb, 'remoteAuthority=', environmentService.remoteAuthority, 'defaultChatAgent=', !!productService.defaultChatAgent);
-		if ((isWeb && !environmentService.remoteAuthority && !environmentService.isSessionsWindow)) {
-			console.log('[DEVSWARM-CHAT] Would hide chat on web but SKIPPING (DevSwarm)');
-		}
-
-		if (!productService.defaultChatAgent) {
-			console.log('[DEVSWARM-CHAT] No defaultChatAgent but CONTINUING (DevSwarm)');
-		}
-
 		const context = this.context = new Lazy(() => this._register(instantiationService.createInstance(ChatEntitlementContext)));
 		this.requests = new Lazy(() => this._register(instantiationService.createInstance(ChatEntitlementRequests, context.value, {
 			clearQuotas: () => this.clearQuotas(),

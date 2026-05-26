@@ -57,6 +57,7 @@ export namespace ChatContextKeys {
 
 	export const supported = ContextKeyExpr.or(IsWebContext.negate(), RemoteNameContext.notEqualsTo(''), ContextKeyExpr.has('config.chat.experimental.serverlessWebEnabled'));
 	export const enabled = new RawContextKey<boolean>('chatIsEnabled', false, { type: 'boolean', description: localize('chatIsEnabled', "True when chat is enabled because a default chat participant is activated with an implementation.") });
+	export const devswarmChatActive = new RawContextKey<boolean>('devswarmChatActive', false, { type: 'boolean', description: localize('devswarmChatActive', "True when DevSwarm is managing the chat panel, hiding stock Copilot pickers.") });
 	export const accountPolicyGateActive = ChatAccountPolicyGateActiveContext;
 
 	/**

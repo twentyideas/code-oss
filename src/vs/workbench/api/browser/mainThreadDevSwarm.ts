@@ -6,6 +6,7 @@
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { revive } from '../../../base/common/marshalling.js';
 import { ILogService } from '../../../platform/log/common/log.js';
+import { CommandsRegistry } from '../../../platform/commands/common/commands.js';
 import { IChatProgress } from '../../contrib/chat/common/chatService/chatService.js';
 import { IDevSwarmService } from '../../contrib/chat/common/devswarm/devswarmService.js';
 import { IExtHostContext, extHostNamedCustomer } from '../../services/extensions/common/extHostCustomers.js';
@@ -28,6 +29,11 @@ export class MainThreadDevSwarm extends Disposable implements MainThreadDevSwarm
 		(this._devswarmService as import('../../contrib/chat/common/devswarm/devswarmService.js').DevSwarmService).setSendToAssistantDelegate(
 			(assistantId, message, requestId, context) => this.sendToAssistant(assistantId, message, requestId, context),
 		);
+
+		// Register command so the DevSwarm extension can push progress back into the fork
+		this._register(CommandsRegistry.registerCommand('devswarm.chat.handleProgress', (accessor, requestId: string, chunks: IChatProgressDto[]) => {
+			this.$handleProgress(requestId, chunks);
+		}));
 	}
 
 	$handleProgress(requestId: string, chunks: IChatProgressDto[]): void {

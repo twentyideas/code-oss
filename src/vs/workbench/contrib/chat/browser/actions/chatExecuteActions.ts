@@ -408,6 +408,7 @@ export class OpenModelPickerAction extends Action2 {
 				group: 'navigation',
 				when:
 					ContextKeyExpr.and(
+						ChatContextKeys.devswarmChatActive.negate(),
 						ContextKeyExpr.or(
 							ChatContextKeys.lockedToCodingAgent.negate(),
 							ChatContextKeys.chatSessionHasTargetedModels),
@@ -499,6 +500,7 @@ export class OpenModePickerAction extends Action2 {
 					id: MenuId.ChatInput,
 					order: 1,
 					when: ContextKeyExpr.and(
+						ChatContextKeys.devswarmChatActive.negate(),
 						ChatContextKeys.enabled,
 						ChatContextKeys.location.isEqualTo(ChatAgentLocation.Chat),
 						ChatContextKeys.inQuickChat.negate(),
@@ -541,6 +543,7 @@ export class OpenSessionTargetPickerAction extends Action2 {
 					id: MenuId.ChatInput,
 					order: 0,
 					when: ContextKeyExpr.and(
+						ChatContextKeys.devswarmChatActive.negate(),
 						ChatContextKeys.enabled,
 						ChatContextKeys.location.isEqualTo(ChatAgentLocation.Chat),
 						ChatContextKeys.inQuickChat.negate(),
@@ -552,6 +555,7 @@ export class OpenSessionTargetPickerAction extends Action2 {
 					id: MenuId.ChatInputSecondary,
 					order: 0,
 					when: ContextKeyExpr.and(
+						ChatContextKeys.devswarmChatActive.negate(),
 						ChatContextKeys.enabled,
 						ChatContextKeys.location.isEqualTo(ChatAgentLocation.Chat),
 						ChatContextKeys.inQuickChat.negate(),
@@ -656,6 +660,7 @@ export class ChatSessionPrimaryPickerAction extends Action2 {
 					group: 'navigation',
 					when:
 						ContextKeyExpr.and(
+							ChatContextKeys.devswarmChatActive.negate(),
 							ChatContextKeys.chatSessionHasModels,
 							ChatContextKeys.chatSessionType.isEqualTo(AgentSessionProviders.Cloud),
 							ContextKeyExpr.or(
@@ -677,6 +682,7 @@ export class ChatSessionPrimaryPickerAction extends Action2 {
 					group: 'navigation',
 					when:
 						ContextKeyExpr.and(
+							ChatContextKeys.devswarmChatActive.negate(),
 							ChatContextKeys.chatSessionHasModels,
 							ChatContextKeys.chatSessionType.notEqualsTo(AgentSessionProviders.Cloud),
 							ContextKeyExpr.or(
