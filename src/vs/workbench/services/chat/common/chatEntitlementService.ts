@@ -350,14 +350,13 @@ export class ChatEntitlementService extends Disposable implements IChatEntitleme
 		);
 		this.sentimentObs = observableFromEvent(this.onDidChangeSentiment, () => this.sentiment);
 
+		console.log('[DEVSWARM-CHAT] ChatEntitlementService init: isWeb=', isWeb, 'remoteAuthority=', environmentService.remoteAuthority, 'defaultChatAgent=', !!productService.defaultChatAgent);
 		if ((isWeb && !environmentService.remoteAuthority && !environmentService.isSessionsWindow)) {
-			// DevSwarm: don't hide chat on web — we use it for our CLI assistant pipeline
-			// Original: ChatEntitlementContextKeys.Setup.hidden.bindTo(this.contextKeyService).set(true);
+			console.log('[DEVSWARM-CHAT] Would hide chat on web but SKIPPING (DevSwarm)');
 		}
 
 		if (!productService.defaultChatAgent) {
-			// DevSwarm: continue even without defaultChatAgent — we provide our own assistants
-			// Original: return;
+			console.log('[DEVSWARM-CHAT] No defaultChatAgent but CONTINUING (DevSwarm)');
 		}
 
 		const context = this.context = new Lazy(() => this._register(instantiationService.createInstance(ChatEntitlementContext)));

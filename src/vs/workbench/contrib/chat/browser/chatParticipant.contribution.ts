@@ -71,7 +71,9 @@ const chatViewDescriptor: IViewDescriptor = {
 	// DevSwarm: always show the chat panel (no Copilot entitlement gate)
 	// Original when clause required panelParticipantRegistered or Setup.hidden.negate()
 };
+console.log('[DEVSWARM-CHAT] Registering chat view descriptor:', ChatViewId, 'in container:', ChatViewContainerId, 'hideIfEmpty:', false, 'when:', chatViewDescriptor.when);
 Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([chatViewDescriptor], chatViewContainer);
+console.log('[DEVSWARM-CHAT] Chat view registered successfully');
 
 const chatParticipantExtensionPoint = extensionsRegistry.ExtensionsRegistry.registerExtensionPoint<IRawChatParticipantContribution[]>({
 	extensionPoint: 'chatParticipants',

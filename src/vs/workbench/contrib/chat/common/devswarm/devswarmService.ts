@@ -39,6 +39,10 @@ export class DevSwarmService implements IDevSwarmService {
 
 	declare readonly _serviceBrand: undefined;
 
+	constructor() {
+		console.log('[DEVSWARM-CHAT] DevSwarmService instantiated');
+	}
+
 	private _activeAssistantId: string | undefined;
 	private _installedAssistants: IDevSwarmAssistantMetadata[] = [];
 	private _availableAssistants: IDevSwarmAssistantMetadata[] = [];
