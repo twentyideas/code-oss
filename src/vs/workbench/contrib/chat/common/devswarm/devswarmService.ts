@@ -6,6 +6,8 @@
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IDevSwarmRequestContext, IDevSwarmResult } from '../../../../api/common/extHost.protocol.js';
 import { IChatProgress } from '../chatService/chatService.js';
+import { IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
+import { ChatContextKeys } from '../actions/chatContextKeys.js';
 
 export interface IDevSwarmAssistantMetadata {
 	id: string;
@@ -39,8 +41,12 @@ export class DevSwarmService implements IDevSwarmService {
 
 	declare readonly _serviceBrand: undefined;
 
-	constructor() {
+	constructor(
+		@IContextKeyService contextKeyService: IContextKeyService,
+	) {
 		console.log('[DEVSWARM-CHAT] DevSwarmService instantiated');
+		ChatContextKeys.enabled.bindTo(contextKeyService).set(true);
+		ChatContextKeys.panelParticipantRegistered.bindTo(contextKeyService).set(true);
 	}
 
 	private _activeAssistantId: string | undefined;

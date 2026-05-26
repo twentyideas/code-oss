@@ -1188,7 +1188,7 @@ export class OpenAssistantPickerAction extends Action2 {
 			title: localize2('interactive.openAssistantPicker.label', "Select Coding Assistant"),
 			category: CHAT_CATEGORY,
 			f1: false,
-			precondition: ChatContextKeys.enabled,
+			// DevSwarm: no precondition — always show, we don't need Copilot's chatIsEnabled
 			menu: {
 				id: MenuId.ChatInput,
 				order: 1,
