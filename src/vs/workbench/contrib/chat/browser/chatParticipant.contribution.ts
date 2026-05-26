@@ -31,7 +31,7 @@ import { ChatContextKeys } from '../common/actions/chatContextKeys.js';
 import { IRawChatParticipantContribution } from '../common/participants/chatParticipantContribTypes.js';
 import { ChatAgentLocation, ChatModeKind } from '../common/constants.js';
 import { ChatViewId, ChatViewContainerId } from './chat.js';
-import { DevSwarmChatViewPane } from './widgetHosts/viewPane/devswarmChatViewPane.js';
+import { ChatViewPane } from './widgetHosts/viewPane/chatViewPane.js';
 
 // --- Chat Container &  View Registration
 
@@ -67,18 +67,9 @@ const chatViewDescriptor: IViewDescriptor = {
 		},
 		order: 1
 	},
-	ctorDescriptor: new SyncDescriptor(DevSwarmChatViewPane),
-	when: ContextKeyExpr.and(
-		ChatContextKeys.accountPolicyGateActive.negate(),
-		ContextKeyExpr.or(
-			ContextKeyExpr.and(
-				ChatContextKeys.Setup.hidden.negate(),
-				ChatContextKeys.Setup.disabledInWorkspace.negate(),
-			),
-			ChatContextKeys.panelParticipantRegistered,
-			ChatContextKeys.extensionInvalid
-		)
-	)
+	ctorDescriptor: new SyncDescriptor(ChatViewPane),
+	// DevSwarm: always show the chat panel (no Copilot entitlement gate)
+	// Original when clause required panelParticipantRegistered or Setup.hidden.negate()
 };
 Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([chatViewDescriptor], chatViewContainer);
 
